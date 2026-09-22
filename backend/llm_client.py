@@ -2,8 +2,8 @@ import litellm
 
 from backend.config import GEMINI_API_KEY
 
-# alias always resolves to Google's current default flash model
-MODEL = "gemini/gemini-flash-latest"
+# "gemini/" prefix routes via Google AI Studio (API key), not Vertex AI
+MODEL = "gemini/gemini-3.6-flash"
 
 
 def call_llm(message: str, system_prompt: str) -> str:
@@ -14,5 +14,6 @@ def call_llm(message: str, system_prompt: str) -> str:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": message},
         ],
+        num_retries=3,  # retries on 503/timeout with backoff
     )
     return response.choices[0].message.content
