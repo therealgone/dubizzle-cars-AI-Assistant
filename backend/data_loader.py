@@ -27,11 +27,15 @@ def run() -> None:
     records = df.to_dict("records")
 
     client = chromadb.PersistentClient(path=CHROMA_PATH)
-    collection = client.get_or_create_collection(COLLECTION_NAME)
+    if COLLECTION_NAME in [c.name for c in client.list_collections()]:
+        client.delete_collection(COLLECTION_NAME)
+    collection = client.create_collection(COLLECTION_NAME)
     model = SentenceTransformer(EMBEDDING_MODEL)
 
     for batch in chunk(records, CHUNK_SIZE):
-        search_texts = [build_search_text(pd.Series(r)) for r in batch]
+        # lowercase before embedding/storing so $contains substring matching
+        # doesn't silently miss real matches over inconsistent ad capitalization
+        search_texts = [build_search_text(pd.Series(r)).lower() for r in batch]
         embeddings = model.encode(search_texts).tolist()
         collection.upsert(
             ids=[str(int(r["Listing_ID"])) for r in batch],

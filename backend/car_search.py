@@ -28,16 +28,33 @@ def _tokenize(text: str) -> list[str]:
 _bm25 = BM25Okapi([_tokenize(doc) for doc in _corpus["documents"]])
 
 
+# fallback fields for anything that doesn't fit make/model/year/trim -- these are
+# free text, so they need substring matching (where_document) not exact equality
+_FREE_TEXT_FIELDS = {"title", "description"}
+
+
 def _metadata_filter(filters: dict) -> list[str]:
     if not filters:
         return []
-    # a list value means "field is any of these" (OR), single value means exact match
-    conditions = [
-        {field: {"$in": value}} if isinstance(value, list) else {field: value}
-        for field, value in filters.items()
-    ]
-    where = conditions[0] if len(conditions) == 1 else {"$and": conditions}
-    return _collection.get(where=where, include=[])["ids"]
+
+    field_conditions = []
+    text_conditions = []
+    for field, value in filters.items():
+        if field in _FREE_TEXT_FIELDS:
+            text_conditions.append({"$contains": str(value).lower()})
+        elif isinstance(value, list):
+            # a list value means "field is any of these" (OR), single value means exact match
+            field_conditions.append({field: {"$in": value}})
+        else:
+            field_conditions.append({field: value})
+
+    kwargs = {"include": []}
+    if field_conditions:
+        kwargs["where"] = field_conditions[0] if len(field_conditions) == 1 else {"$and": field_conditions}
+    if text_conditions:
+        kwargs["where_document"] = text_conditions[0] if len(text_conditions) == 1 else {"$and": text_conditions}
+
+    return _collection.get(**kwargs)["ids"]
 
 
 def _bm25_search(keywords: str) -> list[str]:

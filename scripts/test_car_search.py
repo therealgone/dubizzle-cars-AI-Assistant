@@ -48,12 +48,13 @@ run_test(
     truth_ids=[3, 44, 93],
 )
 
-# TEST 2: no metadata field for "spec" exists at all -- filter leg has nothing to work with.
+# TEST 2: no dedicated "spec" field exists -- LLM falls back to filters={"description": ...},
+# which routes through Chroma's substring where_document match, not exact equality.
 # 45/100 listings mention GCC, so this also stresses volume, not just presence/absence.
 run_test(
     2,
     "\"I'm looking for a GCC spec car\"",
-    filters=None,
+    filters={"description": "gcc"},
     keywords="gcc spec",
     semantic_query="I'm looking for a GCC spec car",
     truth_ids=[1, 3, 6, 8, 10, 11, 12, 13, 14, 16, 18, 24, 27, 31, 32, 39, 40, 41, 42, 44,
