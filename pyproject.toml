@@ -1,5 +1,5 @@
 [project]
-name = "car-shopping-assistant"
+name = "dubizzle-car-assistant"
 version = "0.1.0"
 description = "Add your description here"
 authors = [
@@ -21,9 +21,5 @@ dependencies = [
     "uvicorn[standard]>=0.53.0",
 ]
 
-[project.scripts]
-car-shopping-assistant = "car_shopping_assistant:main"
-
-[build-system]
-requires = ["uv_build>=0.12.17,<0.13.0"]
-build-backend = "uv_build"
+[tool.uv]
+package = false
