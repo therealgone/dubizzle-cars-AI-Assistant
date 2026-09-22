@@ -2,11 +2,10 @@ import chromadb
 import pandas as pd
 from sentence_transformers import SentenceTransformer
 
+from backend.config import CHROMA_PATH, COLLECTION_NAME, EMBEDDING_MODEL
+
 DATA_PATH = "data/cars_dataset.xlsx"
 SHEET_NAME = "cleaned dataset"
-CHROMA_PATH = "chroma_data"
-COLLECTION_NAME = "cars"
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 CHUNK_SIZE = 20
 
 
