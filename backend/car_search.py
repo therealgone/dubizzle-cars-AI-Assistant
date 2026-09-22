@@ -1,3 +1,5 @@
+import re
+
 import chromadb
 from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
@@ -5,7 +7,9 @@ from sentence_transformers import SentenceTransformer
 from backend.config import CHROMA_PATH, COLLECTION_NAME, EMBEDDING_MODEL
 
 RRF_K = 60
-CANDIDATES_PER_SEARCH = 20
+CANDIDATES_PER_SEARCH = 40
+
+_TOKEN_RE = re.compile(r"\w+")
 
 _client = chromadb.PersistentClient(path=CHROMA_PATH)
 _collection = _client.get_collection(COLLECTION_NAME)
@@ -14,7 +18,14 @@ _model = SentenceTransformer(EMBEDDING_MODEL)
 # BM25 needs its own in-memory index, built once from the same corpus as Chroma
 _corpus = _collection.get(include=["documents"])
 _corpus_ids = _corpus["ids"]
-_bm25 = BM25Okapi([doc.lower().split() for doc in _corpus["documents"]])
+
+
+def _tokenize(text: str) -> list[str]:
+    # word-boundary tokenizer, not .split() -- "-GCC" or "GCC," must still match "gcc"
+    return _TOKEN_RE.findall(text.lower())
+
+
+_bm25 = BM25Okapi([_tokenize(doc) for doc in _corpus["documents"]])
 
 
 def _metadata_filter(filters: dict) -> list[str]:
@@ -32,7 +43,7 @@ def _metadata_filter(filters: dict) -> list[str]:
 def _bm25_search(keywords: str) -> list[str]:
     if not keywords:
         return []
-    scores = _bm25.get_scores(keywords.lower().split())
+    scores = _bm25.get_scores(_tokenize(keywords))
     ranked = sorted(zip(_corpus_ids, scores), key=lambda pair: pair[1], reverse=True)
     return [listing_id for listing_id, score in ranked[:CANDIDATES_PER_SEARCH] if score > 0]
 
