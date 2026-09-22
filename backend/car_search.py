@@ -17,17 +17,14 @@ _corpus_ids = _corpus["ids"]
 _bm25 = BM25Okapi([doc.lower().split() for doc in _corpus["documents"]])
 
 
-def _filter_condition(field: str, value) -> dict:
-    # a list means "field is any of these" (OR), single value means exact match
-    if isinstance(value, list):
-        return {field: {"$in": value}}
-    return {field: value}
-
-
 def _metadata_filter(filters: dict) -> list[str]:
     if not filters:
         return []
-    conditions = [_filter_condition(field, value) for field, value in filters.items()]
+    # a list value means "field is any of these" (OR), single value means exact match
+    conditions = [
+        {field: {"$in": value}} if isinstance(value, list) else {field: value}
+        for field, value in filters.items()
+    ]
     where = conditions[0] if len(conditions) == 1 else {"$and": conditions}
     return _collection.get(where=where, include=[])["ids"]
 
