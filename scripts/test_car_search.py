@@ -3,8 +3,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import pandas as pd
-
 from backend.car_search import _bm25_search, _collection, _metadata_filter, _semantic_search, search_cars
 
 
@@ -46,13 +44,18 @@ print("count:", len(fused))
 for m in fused:
     print(m["listing_id"], m["year"], m["make"], m["model"], m["trim"])
 
-# 7. ground-truth check: mercedes-benz, year 2019-2023
-df = pd.read_excel("data/cars_dataset.xlsx", sheet_name="cleaned dataset").dropna(subset=["Listing_ID"])
-truth = df[(df["make"] == "mercedes-benz") & (df["year"] >= 2019) & (df["year"] <= 2023)]
-truth_ids = sorted((str(int(x)) for x in truth["Listing_ID"]), key=int)
-filter_ids = sorted(_metadata_filter({"make": "mercedes-benz", "year": [2019, 2020, 2021, 2022, 2023]}), key=int)
+# 7. mercedes-benz, 2019-2023, run through all three methods as an LLM might call them
+show(
+    "metadata_filter(make=mercedes-benz, year=[2019..2023])",
+    _metadata_filter({"make": "mercedes-benz", "year": [2019, 2020, 2021, 2022, 2023]}),
+)
 
-print("\n--- ground truth vs _metadata_filter: mercedes-benz 2019-2023 ---")
-print("ground truth ids:", truth_ids)
-print("filter result ids:", filter_ids)
-print("same set of ids:", set(truth_ids) == set(filter_ids))
+show(
+    "bm25_search('mercedes-benz 2019 2020 2021 2022 2023')",
+    _bm25_search("mercedes-benz 2019 2020 2021 2022 2023"),
+)
+
+show(
+    "semantic_search('Mercedes-Benz from 2019 to 2023')",
+    _semantic_search("Mercedes-Benz from 2019 to 2023"),
+)
