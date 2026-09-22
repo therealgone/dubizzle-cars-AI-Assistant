@@ -21,3 +21,6 @@ chroma_data/
 .cache/
 *.session
 .claude/
+
+# Working notes, not part of the deliverable
+PROGRESS.md
