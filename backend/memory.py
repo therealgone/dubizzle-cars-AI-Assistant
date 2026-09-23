@@ -27,8 +27,6 @@ def init_db() -> None:
         """
         CREATE TABLE IF NOT EXISTS user_profile (
             username TEXT PRIMARY KEY,
-            filters TEXT NOT NULL DEFAULT '{}',
-            selected_car TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )
@@ -87,50 +85,20 @@ def user_exists(username: str) -> bool:
 
 
 def get_or_create_user(username: str) -> dict:
+    # identity only -- filters/selected_car are session-cache-only, never persisted here
     username = _normalize_username(username)
     conn = _connect()
     row = conn.execute("SELECT * FROM user_profile WHERE username = ?", (username,)).fetchone()
     if row is None:
         now = _now()
         conn.execute(
-            "INSERT INTO user_profile (username, filters, selected_car, created_at, updated_at) "
-            "VALUES (?, '{}', NULL, ?, ?)",
+            "INSERT INTO user_profile (username, created_at, updated_at) VALUES (?, ?, ?)",
             (username, now, now),
         )
         conn.commit()
         row = conn.execute("SELECT * FROM user_profile WHERE username = ?", (username,)).fetchone()
     conn.close()
-    return {
-        "username": row["username"],
-        "filters": json.loads(row["filters"]),
-        "selected_car": json.loads(row["selected_car"]) if row["selected_car"] else None,
-    }
-
-
-def update_filters(username: str, new_fields: dict) -> dict:
-    username = _normalize_username(username)
-    user = get_or_create_user(username)
-    merged = {**user["filters"], **new_fields}
-    conn = _connect()
-    conn.execute(
-        "UPDATE user_profile SET filters = ?, updated_at = ? WHERE username = ?",
-        (json.dumps(merged), _now(), username),
-    )
-    conn.commit()
-    conn.close()
-    return merged
-
-
-def set_selected_car(username: str, car: dict | None) -> None:
-    username = _normalize_username(username)
-    get_or_create_user(username)  # ensure row exists
-    conn = _connect()
-    conn.execute(
-        "UPDATE user_profile SET selected_car = ?, updated_at = ? WHERE username = ?",
-        (json.dumps(car) if car else None, _now(), username),
-    )
-    conn.commit()
-    conn.close()
+    return {"username": row["username"]}
 
 
 def log_interaction(username: str, listing_id: int, event_type: str, reason: str | None = None) -> None:
@@ -203,10 +171,11 @@ def get_selected_history(username: str, limit: int = 20) -> list[int]:
 
 
 def select_car(username: str, session: dict, car: dict) -> None:
-    """The one action for 'user picked this car' -- updates current selected_car
-    AND logs it to history in the same call, so switching cars never loses the
-    previous one from the user's selection history."""
-    update_selected_car(username, session, car)
+    """The one action for 'user picked this car' -- updates the session's
+    current selected_car (cache-only, never persisted to SQL) AND logs a
+    permanent "selected" event in the same call, so switching cars never
+    loses the previous one from the user's selection history."""
+    update_selected_car(session, car)
     log_interaction(username, car["listing_id"], "selected")
 
 
@@ -376,12 +345,15 @@ def push_recent_log(session: dict, summary: str) -> dict:
     return session
 
 
-def update_active_filters(username: str, session: dict, new_fields: dict) -> dict:
-    merged = update_filters(username, new_fields)
+def update_active_filters(session: dict, new_fields: dict) -> dict:
+    """Session-cache-only -- merges into whatever's already active this
+    session, never persisted to SQL. Every new session starts with an empty
+    filter regardless of what was active last time."""
+    merged = {**session["current_active_filters"], **new_fields}
     session["current_active_filters"] = merged
     return merged
 
 
-def update_selected_car(username: str, session: dict, car: dict | None) -> None:
-    set_selected_car(username, car)
+def update_selected_car(session: dict, car: dict | None) -> None:
+    """Session-cache-only -- see update_active_filters."""
     session["selected_car"] = car
