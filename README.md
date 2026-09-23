@@ -166,7 +166,7 @@ Beyond those constraints, a few product directions felt out of scope for a take-
 
 ## Required Screenshots
 
-A terminal log of a live run is also included: [`docs/demo_conversation_log.txt`](docs/demo_conversation_log.txt).
+A text export of the full multi-turn chat session is also included: [`docs/demo_conversation_log.txt`](docs/demo_conversation_log.txt).
 
 ### 1. A successful multi-turn conversation exploring the inventory
 ![Multi-turn conversation](docs/screenshots/multi-chat.png)
