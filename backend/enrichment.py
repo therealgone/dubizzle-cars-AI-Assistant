@@ -34,7 +34,8 @@ Respond with ONLY a JSON object shaped exactly like:
 {{"results": [{{"listing_id": <id>, "body_type": "<value>", "color": "<value>"}}]}}
 One entry per listing given, same order, nothing else in the response."""
 
-CHUNK_SIZE = 20
+# 1 request for all 100 listings -- quota is the binding constraint, not payload size
+CHUNK_SIZE = 100
 
 
 def extract_price(text: str) -> float | None:
