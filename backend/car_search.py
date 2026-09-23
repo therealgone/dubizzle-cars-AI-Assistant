@@ -33,6 +33,17 @@ _bm25 = BM25Okapi([_tokenize(doc) for doc in _corpus["documents"]])
 _FREE_TEXT_FIELDS = {"title", "description"}
 
 
+def _normalize(value):
+    # stored metadata is all lowercase, but an LLM naturally capitalizes
+    # proper nouns ("Ferrari", "Mercedes-Benz") -- match case-insensitively
+    # by normalizing here rather than trusting callers to lowercase first
+    if isinstance(value, str):
+        return value.lower()
+    if isinstance(value, list):
+        return [v.lower() if isinstance(v, str) else v for v in value]
+    return value
+
+
 def _metadata_filter(filters: dict) -> list[str]:
     if not filters:
         return []
@@ -44,9 +55,9 @@ def _metadata_filter(filters: dict) -> list[str]:
             text_conditions.append({"$contains": str(value).lower()})
         elif isinstance(value, list):
             # a list value means "field is any of these" (OR), single value means exact match
-            field_conditions.append({field: {"$in": value}})
+            field_conditions.append({field: {"$in": _normalize(value)}})
         else:
-            field_conditions.append({field: value})
+            field_conditions.append({field: _normalize(value)})
 
     kwargs = {"include": []}
     if field_conditions:
