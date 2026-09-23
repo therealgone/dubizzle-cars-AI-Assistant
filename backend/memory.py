@@ -60,6 +60,16 @@ def init_db() -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS chat_log_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            summary TEXT NOT NULL
+        )
+        """
+    )
     conn.commit()
     conn.close()
 
@@ -164,22 +174,40 @@ def get_recent_interactions(username: str, limit: int = 6) -> list[dict]:
     return [dict(row) for row in rows]
 
 
-def get_recently_viewed(username: str, limit: int = 6) -> list[int]:
+def _distinct_listing_ids_by_event(username: str, event_type: str, limit: int) -> list[int]:
     username = _normalize_username(username)
     conn = _connect()
     rows = conn.execute(
         "SELECT listing_id FROM car_interaction_log "
-        "WHERE username = ? AND event_type = 'shown' ORDER BY timestamp DESC",
-        (username,),
+        "WHERE username = ? AND event_type = ? ORDER BY timestamp DESC",
+        (username, event_type),
     ).fetchall()
     conn.close()
     seen: list[int] = []
     for row in rows:
-        if row["listing_id"] not in seen:  # same car can be shown more than once
+        if row["listing_id"] not in seen:  # same car can trigger this event more than once
             seen.append(row["listing_id"])
         if len(seen) == limit:
             break
     return seen
+
+
+def get_recently_viewed(username: str, limit: int = 6) -> list[int]:
+    """Cars that appeared in a search results list -- not necessarily picked."""
+    return _distinct_listing_ids_by_event(username, "shown", limit)
+
+
+def get_selected_history(username: str, limit: int = 20) -> list[int]:
+    """Cars the user explicitly picked out of a list, most recent first."""
+    return _distinct_listing_ids_by_event(username, "selected", limit)
+
+
+def select_car(username: str, session: dict, car: dict) -> None:
+    """The one action for 'user picked this car' -- updates current selected_car
+    AND logs it to history in the same call, so switching cars never loses the
+    previous one from the user's selection history."""
+    update_selected_car(username, session, car)
+    log_interaction(username, car["listing_id"], "selected")
 
 
 def is_valid_booking_slot(date_str: str, time_str: str) -> bool:
@@ -238,6 +266,75 @@ def get_bookings(username: str, active_only: bool = True) -> list[dict]:
     rows = conn.execute(query, params).fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+
+def log_chat_summary(username: str, summary: str) -> None:
+    """Persistent, cross-session chat memory -- not the short-term session
+    cache's recent_logs (capped at 6, reset-able). This is meant to answer
+    "what did we talk about yesterday," so it's never trimmed here."""
+    username = _normalize_username(username)
+    conn = _connect()
+    conn.execute(
+        "INSERT INTO chat_log_history (username, timestamp, summary) VALUES (?, ?, ?)",
+        (username, _now(), summary),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_chat_history(username: str, limit: int = 20, on_date: str | None = None) -> list[dict]:
+    """on_date: 'YYYY-MM-DD' to answer "what did we view yesterday" style questions."""
+    username = _normalize_username(username)
+    conn = _connect()
+    query = "SELECT timestamp, summary FROM chat_log_history WHERE username = ?"
+    params: list = [username]
+    if on_date:
+        query += " AND substr(timestamp, 1, 10) = ?"
+        params.append(on_date)
+    query += " ORDER BY timestamp DESC LIMIT ?"
+    params.append(limit)
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def search_history(
+    username: str,
+    keyword: str | None = None,
+    event_types: list[str] | None = None,
+    limit: int = 10,
+) -> list[dict]:
+    """Search the user's OWN past cars (selected/favorited by default) by
+    make/model/title keyword -- e.g. "the Mercedes-Benz I viewed before"."""
+    from backend.car_search import _collection  # local import: avoid a hard dependency at module load
+
+    username = _normalize_username(username)
+    event_types = event_types or ["selected", "favorited"]
+    placeholders = ",".join("?" for _ in event_types)
+    conn = _connect()
+    rows = conn.execute(
+        f"SELECT listing_id, MAX(timestamp) as last_seen FROM car_interaction_log "
+        f"WHERE username = ? AND event_type IN ({placeholders}) "
+        f"GROUP BY listing_id ORDER BY last_seen DESC",
+        (username, *event_types),
+    ).fetchall()
+    conn.close()
+
+    listing_ids = [str(row["listing_id"]) for row in rows]
+    if not listing_ids:
+        return []
+
+    fetched = _collection.get(ids=listing_ids, include=["metadatas"])
+    by_id = dict(zip(fetched["ids"], fetched["metadatas"]))
+    results = [by_id[i] for i in listing_ids if i in by_id]
+
+    if keyword:
+        kw = keyword.lower()
+        results = [
+            r for r in results
+            if kw in r["make"].lower() or kw in r["model"].lower() or kw in r["title"].lower()
+        ]
+    return results[:limit]
 
 
 def _load_session_cache() -> dict:
