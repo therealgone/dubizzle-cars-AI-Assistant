@@ -1,12 +1,27 @@
 import sys
 from pathlib import Path
 
+sys.stdout.reconfigure(encoding="utf-8")  # some ad titles use characters outside cp1252
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from backend.car_search import _bm25_search, _metadata_filter, _semantic_search, search_cars
+from backend.car_search import _bm25_search, _collection, _metadata_filter, _semantic_search, search_cars
 
 BORDER = "=" * 70
 RULE = "-" * 70
+
+
+def show_database():
+    all_rows = _collection.get(include=["metadatas"])
+    metadatas = sorted(all_rows["metadatas"], key=lambda m: m["listing_id"])
+    print(f"\n{BORDER}\nCHROMA DATABASE -- {len(metadatas)} listings\n{BORDER}")
+    for m in metadatas:
+        price = m.get("price_aed", "not mentioned")
+        print(
+            f"{m['listing_id']:>3} | {m['year']} | {m['make']:<15} | {m['model']:<15} | "
+            f"{m['trim']:<15} | {m['body_type']:<20} | {m['color']:<15} | {price:<12} | "
+            f"{m['title'][:60]}"
+        )
+    print()
 
 
 def report_leg(label, returned, truth):
@@ -37,6 +52,8 @@ def run_test(num, description, filters, keywords, semantic_query, truth_ids):
     fused_ids = [str(i) for i in fused_ids]
     report_leg("FINAL FUSED RANKING  search_cars(...)", fused_ids, truth_ids)
 
+
+show_database()
 
 # TEST 1: plain make lookup, should be trivial for filter, easy for keyword/semantic
 run_test(
