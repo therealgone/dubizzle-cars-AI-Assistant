@@ -75,7 +75,9 @@ def _classify_chunk(rows: list[dict]) -> dict[int, dict]:
             body_type = "other"
         result[int(entry["listing_id"])] = {
             "body_type": body_type,
-            "color": entry.get("color") or "not mentioned",
+            # lowercase -- exact-match filtering is case-sensitive, and the LLM
+            # otherwise echoes whatever casing the ad text happened to use
+            "color": (entry.get("color") or "not mentioned").lower(),
         }
     return result
 
