@@ -79,5 +79,16 @@ def run() -> None:
     print(f"loaded {collection.count()} listings into '{COLLECTION_NAME}'")
 
 
+def ensure_index() -> None:
+    """Startup check: build the Chroma index only if it's missing or incomplete."""
+    client = chromadb.PersistentClient(path=CHROMA_PATH)
+    expected = len(load_listings())
+    if COLLECTION_NAME in [c.name for c in client.list_collections()]:
+        if client.get_collection(COLLECTION_NAME).count() == expected:
+            return
+    print("search index missing or incomplete -- building it now (one-time, takes a minute or two)")
+    run()
+
+
 if __name__ == "__main__":
     run()

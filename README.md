@@ -43,26 +43,25 @@ cp .env.example .env
 # then open .env and set GEMINI_API_KEY=your_key_here
 ```
 
-### 3. Build the search index (one time)
-```bash
-uv run python -m backend.data_loader
-```
-Reads `data/cars_dataset.xlsx`, classifies each listing's body type and color with a single Gemini call, embeds every listing, and stores everything in a local Chroma database (`chroma_data/`). The backend will not start until this has been run, and it needs the API key from step 2.
-
-### 4. Run the backend
+### 3. Run the backend
 ```bash
 uv run uvicorn backend.main:app --port 8000
 ```
-The API will be available at `http://localhost:8000` (interactive docs at `/docs`). The first start takes a few seconds while the embedding model loads.
+Everything the backend needs is set up automatically on startup, in this order:
+- **Search index:** if the Chroma database (`chroma_data/`) is missing or incomplete, the backend builds it before accepting requests. It reads `data/cars_dataset.xlsx`, classifies every listing's body type and color with a single Gemini call, then embeds the listings and stores them in Chroma. This happens once and takes a minute or two on the very first start; later starts skip it. It needs the API key from step 2.
+- **Long-term memory:** the SQLite database `data/memory.db` and its tables are created if they don't exist. Each user's rows are created automatically the first time they send a message.
+- **Lead log:** `data/leads.csv` is created with its header row if it doesn't exist.
 
-### 5. Run the frontend
+The API will then be available at `http://localhost:8000` (interactive docs at `/docs`). To force a rebuild of the search index, delete `chroma_data/` and restart, or run `uv run python -m backend.data_loader`.
+
+### 4. Run the frontend
 In a separate terminal:
 ```bash
 uv run streamlit run frontend/app.py
 ```
 Opens at `http://localhost:8501`. Enter a name to sign in — signing in again later with the same name is recognized as a returning user.
 
-The backend creates `data/memory.db`, `data/session_cache.json` and `data/leads.csv` on first use; these, along with `chroma_data/`, are generated locally and not committed.
+`data/memory.db`, `data/session_cache.json`, `data/leads.csv` and `chroma_data/` are generated locally and not committed.
 
 ## Why This Setup
 

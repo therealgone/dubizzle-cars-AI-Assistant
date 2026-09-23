@@ -5,12 +5,15 @@ from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
 
 from backend.config import CHROMA_PATH, COLLECTION_NAME, EMBEDDING_MODEL
+from backend.data_loader import ensure_index
 
 RRF_K = 60
 CANDIDATES_PER_SEARCH = 40
 
 _TOKEN_RE = re.compile(r"\w+")
 
+# first start on a fresh machine: builds the index (Gemini classification + embeddings) before opening it
+ensure_index()
 _client = chromadb.PersistentClient(path=CHROMA_PATH)
 _collection = _client.get_collection(COLLECTION_NAME)
 _model = SentenceTransformer(EMBEDDING_MODEL)
