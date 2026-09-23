@@ -85,6 +85,9 @@ Opens at `http://localhost:8501`. Enter a name to sign in — signing in again l
 ![Recalling a car from selection history](docs/screenshots/selected-memory-chat.png)
 *Asking "which car has warranty that we looked at": the answer comes from the user's selection history, and the Land Rover Velar (arrow) is the one whose listing mentions a warranty.*
 
+![All selected cars](docs/screenshots/showing-all-selected-cars.png)
+*Asking "show me all the selected cars": every car selected so far is listed with a short description, straight from the user's selection history.*
+
 ## Implementation Details
 
 ### Agent tools & API
@@ -170,7 +173,7 @@ A terminal log of a live run is also included: [`docs/demo_conversation_log.txt`
 *One continuous session: a search for a white SUV, a side-by-side comparison, booking a test drive, widening the color filter, listing the bookings, deleting one, rescheduling another, and finally listing every car selected so far. Each follow-up resolves against the earlier turns without the user restating anything.*
 
 ### 2. The agent recalling a user's previous preferences and history in a completely new session
-Each screenshot below was taken after restarting the app, so every one starts from the dubizzle heading and the fresh welcome message with an empty chat. The short-term state is gone, and the answers come from long-term memory.
+The first three screenshots below were taken after restarting the app, so each starts from the dubizzle heading and the fresh welcome message with an empty chat. The short-term state is gone, and the answers come from long-term memory.
 
 ![New session: what was I searching for](docs/screenshots/new-chat-memory-1.png)
 *New session: "what was i searching before like the filter and type of car" is answered from history, listing the SUVs and sports cars the user selected or favorited.*
@@ -180,6 +183,9 @@ Each screenshot below was taken after restarting the app, so every one starts fr
 
 ![New session: my bookings](docs/screenshots/new-chat-memory-3.png)
 *New session: "what are my booking" returns the one active test drive left after the earlier deletion and reschedule, the Audi Q7 on Friday, September 25 at 2:00 PM.*
+
+![Recalling the saved preference](docs/screenshots/saved-filter-memory.png)
+*Recalling a saved preference: after an earlier search for a white SUV, "what if i don't want the color white it can be any color" keeps the SUV preference and only widens the color, returning SUVs in other colors (silver Ford Explorer, Land Rover Velar, Cayenne GTS and others).*
 
 ## Testing
 
