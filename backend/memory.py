@@ -319,6 +319,27 @@ def record_lead(username: str, price_range: str, preferences: str, notes: str = 
         })
 
 
+def get_last_lead(username: str) -> dict | None:
+    """The most recent leads.csv row for this user, or None."""
+    init_leads_csv()
+    username = _normalize_username(username)
+    last = None
+    with open(LEADS_CSV_PATH, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            if row["username"] == username:
+                last = row
+    return last
+
+
+def lead_is_new(username: str, price_range: str, preferences: str) -> bool:
+    """False when this is the same need as the user's last recorded lead (wording/case aside)."""
+    last = get_last_lead(username)
+    if last is None:
+        return True
+    same = lambda a, b: " ".join(a.lower().split()) == " ".join(b.lower().split())
+    return not (same(last["price_range"], price_range) and same(last["preferences"], preferences))
+
+
 def log_chat_summary(username: str, summary: str) -> None:
     """Persistent, cross-session chat memory -- not the short-term session
     cache's recent_logs (capped at 6, reset-able). This is meant to answer

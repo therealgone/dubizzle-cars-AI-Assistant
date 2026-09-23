@@ -1,3 +1,5 @@
+import json
+
 import litellm
 
 import backend.memory as memory
@@ -252,6 +254,8 @@ def tool_manage_booking(username: str, session: dict, action: str, listing_id: i
 
 
 def tool_qualify_lead(username: str, session: dict, price_range: str, preferences: str, notes: str = "") -> dict:
+    if not memory.lead_is_new(username, price_range, preferences):
+        return {"status": "already recorded -- no change from this user's last lead"}
     memory.record_lead(username, price_range=price_range, preferences=preferences, notes=notes)
     return {"status": "recorded"}
 
@@ -288,13 +292,30 @@ def call_tool(name: str, username: str, session: dict, arguments: dict):
 # Chat summarization -- fires every SUMMARIZE_EVERY exchanges.
 # ---------------------------------------------------------------------------
 
-SUMMARIZE_PROMPT = (
-    "Summarize this chat exchange in 1-2 short sentences, focused on car "
-    "preferences, searches, and selections. Plain text, no preamble."
-)
+SUMMARIZE_PROMPT = """You summarize a short car-shopping chat and pull out the sales lead in it.
+Respond with ONLY a JSON object shaped exactly like:
+{"summary": "...", "price_range": "...", "preferences": "...", "notes": "..."}
+- summary: 1-2 short sentences about the user's searches, preferences and selections.
+- price_range: the budget the user actually stated, in their own words. "" if none was stated. Never guess.
+- preferences: what they are looking for (make, model, body type, color, year, seats, specs). "" if nothing specific.
+- notes: anything else relevant (financing, family size, urgency, test drive interest). "" if none.
+You are also given the user's previous recorded lead. If this chat adds nothing new to it, return "" for price_range and preferences.
+Use only what the user said; the assistant's messages are context, not the user's needs."""
+
+
+def _lead_context(username: str, session: dict) -> str:
+    previous = memory.get_last_lead(username)
+    previous_text = (
+        f"price_range={previous['price_range']!r}, preferences={previous['preferences']!r}, notes={previous['notes']!r}"
+        if previous else "none yet"
+    )
+    filters = session.get("current_active_filters") or "none"
+    return f"Previous recorded lead: {previous_text}\nActive search filters: {filters}"
 
 
 def maybe_summarize(username: str, session: dict) -> None:
+    """Every SUMMARIZE_EVERY exchanges: save a chat summary, and record a lead if the chat revealed a new need.
+    One LLM call does both."""
     if not memory.ready_to_summarize(session):
         return
     unsummarized = session["pending_turns"][-session["turns_since_summary"]:]
@@ -305,14 +326,20 @@ def maybe_summarize(username: str, session: dict) -> None:
             api_key=GEMINI_API_KEY,
             messages=[
                 {"role": "system", "content": SUMMARIZE_PROMPT},
-                {"role": "user", "content": transcript},
+                {"role": "user", "content": f"{_lead_context(username, session)}\n\nChat:\n{transcript}"},
             ],
+            response_format={"type": "json_object"},
             num_retries=3,
         )
+        data = json.loads(response.choices[0].message.content)
+        summary = str(data["summary"]).strip()
     except Exception as exc:
         # turns stay pending and this retries after the next message
         print(f"[summarize skipped] {describe_llm_error(exc)}")
         return
-    summary = response.choices[0].message.content.strip()
     memory.log_chat_summary(username, summary)
+    price_range = str(data.get("price_range") or "").strip()
+    preferences = str(data.get("preferences") or "").strip()
+    if (price_range or preferences) and memory.lead_is_new(username, price_range, preferences):
+        memory.record_lead(username, price_range=price_range, preferences=preferences, notes=str(data.get("notes") or "").strip())
     session["turns_since_summary"] = 0  # live context in pending_turns is left alone
