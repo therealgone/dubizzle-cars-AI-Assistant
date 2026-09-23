@@ -25,6 +25,11 @@ def _user_lock(username: str) -> threading.Lock:
     return _user_locks[username.strip().lower()]
 
 
+def _log(message: str) -> None:
+    # logging must never break a request: a Windows console can't encode e.g. Arabic listing text
+    print(message.encode("ascii", "replace").decode("ascii"))
+
+
 MAX_TOOL_ITERATIONS = 5
 FALLBACK_REPLY = "Sorry, I'm having trouble with that -- could you try rephrasing?"
 
@@ -81,7 +86,7 @@ def run_chat_turn(username: str, session: dict, user_message: str) -> tuple[str,
                 num_retries=3,
             )
         except Exception as exc:
-            print(f"[llm error] {type(exc).__name__}: {exc}")
+            _log(f"[llm error] {type(exc).__name__}: {exc}")
             final_reply = f"Sorry, I can't answer right now: {describe_llm_error(exc)}."
             llm_failed = True
             break
@@ -102,7 +107,7 @@ def run_chat_turn(username: str, session: dict, user_message: str) -> tuple[str,
                                  "content": json.dumps({"error": "tool arguments were not valid JSON"})})
                 continue
             result = tools_module.call_tool(tc.function.name, username, session, args)
-            print(f"[tool] {username}: {tc.function.name}({args}) -> {str(result)[:160]}")
+            _log(f"[tool] {username}: {tc.function.name}({args}) -> {str(result)[:160]}")
             # "make" is unique to car dicts -- booking dicts also have
             # listing_id, which used to cause bookings to render as broken,
             # empty car cards ("Untitled listing")
