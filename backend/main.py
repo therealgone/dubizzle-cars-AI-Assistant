@@ -7,7 +7,7 @@ from pydantic import BaseModel
 import backend.memory as memory
 import backend.tools as tools_module
 from backend.config import GEMINI_API_KEY
-from backend.llm_client import MODEL
+from backend.llm_client import MODEL, describe_llm_error
 from backend.prompts import build_system_prompt
 
 app = FastAPI()
@@ -58,15 +58,22 @@ def run_chat_turn(username: str, session: dict, user_message: str) -> tuple[str,
     cars_this_turn: list[dict] = []
     final_reply = FALLBACK_REPLY
 
+    llm_failed = False
     for _ in range(MAX_TOOL_ITERATIONS):
-        response = litellm.completion(
-            model=MODEL,
-            api_key=GEMINI_API_KEY,
-            messages=messages,
-            tools=tools_module.TOOL_SCHEMAS,
-            tool_choice="auto",
-            num_retries=3,
-        )
+        try:
+            response = litellm.completion(
+                model=MODEL,
+                api_key=GEMINI_API_KEY,
+                messages=messages,
+                tools=tools_module.TOOL_SCHEMAS,
+                tool_choice="auto",
+                num_retries=3,
+            )
+        except Exception as exc:
+            print(f"[llm error] {type(exc).__name__}: {exc}")
+            final_reply = f"Sorry, I can't answer right now: {describe_llm_error(exc)}."
+            llm_failed = True
+            break
         msg = response.choices[0].message
 
         if not msg.tool_calls:
@@ -75,7 +82,14 @@ def run_chat_turn(username: str, session: dict, user_message: str) -> tuple[str,
 
         messages.append(msg.model_dump())
         for tc in msg.tool_calls:
-            args = json.loads(tc.function.arguments)
+            try:
+                args = json.loads(tc.function.arguments)
+            except json.JSONDecodeError:
+                args = None
+            if args is None:
+                messages.append({"role": "tool", "tool_call_id": tc.id,
+                                 "content": json.dumps({"error": "tool arguments were not valid JSON"})})
+                continue
             result = tools_module.call_tool(tc.function.name, username, session, args)
             # "make" is unique to car dicts -- booking dicts also have
             # listing_id, which used to cause bookings to render as broken,
@@ -88,8 +102,10 @@ def run_chat_turn(username: str, session: dict, user_message: str) -> tuple[str,
                 "content": json.dumps(result, default=str),
             })
 
-    memory.add_pending_turn(session, user_message, final_reply)
-    tools_module.maybe_summarize(username, session)
+    # a failed turn isn't recorded, so the error message never becomes chat context
+    if not llm_failed:
+        memory.add_pending_turn(session, user_message, final_reply)
+        tools_module.maybe_summarize(username, session)
     return final_reply, cars_this_turn
 
 

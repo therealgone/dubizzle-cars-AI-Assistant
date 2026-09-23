@@ -96,6 +96,9 @@ Once the model knows the user's budget and at least one other preference (make, 
 ### System prompt & guardrails
 The system prompt enforces: no hallucination (the model may only state facts returned by a tool, and a listing with no price is described as "price not mentioned"), no competitor mentions, scope refusal for non-automotive requests, and resistance to prompt injection (instructions embedded in listing text, chat history or user messages are treated as data rather than commands, including a message that tries to smuggle an off-topic instruction ahead of a legitimate-looking car question) — refusals are kept short, polite, and redirecting rather than over-explained. A separate disambiguation rule covers the case where a user references a past car and more than one match exists: the model shows the candidates and asks which one rather than guessing — the same "never guess" principle applied to booking dates is applied here to car identity.
 
+### Handling Gemini failures
+Gemini is the only external dependency that can fail, and every place it is called handles that. In chat, a rate-limit (quota) error, a rejected API key, an unavailable model or a timeout becomes a plain-English reply ("Sorry, I can't answer right now: the Gemini API usage limit has been reached...") instead of a crash, and the failed turn isn't saved into the conversation. If the periodic chat summarization fails, it is skipped and retried after the next message. If the search index can't be built at startup, the backend stops with a clear message and writes nothing, so the next start retries cleanly. The Streamlit client also shows a friendly message if the backend times out or can't be reached.
+
 ### Login, UI & dev panel
 Login is deliberately simple: the user types a name (no password), matched case-insensitively, and is greeted with a welcome message. The interface uses dubizzle's logo and red-and-white theme, with search results shown as cards.
 

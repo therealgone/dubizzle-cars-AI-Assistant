@@ -4,7 +4,7 @@ import backend.memory as memory
 from backend.car_search import _collection, search_cars
 from backend.config import GEMINI_API_KEY
 from backend.enrichment import BODY_TYPES
-from backend.llm_client import MODEL
+from backend.llm_client import MODEL, describe_llm_error
 
 # ---------------------------------------------------------------------------
 # Tool schemas (litellm/OpenAI function-calling format) -- what the LLM sees.
@@ -301,15 +301,20 @@ def maybe_summarize(username: str, session: dict) -> None:
     transcript = "\n".join(
         f"User: {t['user']}\nAssistant: {t['assistant']}" for t in session["pending_turns"]
     )
-    response = litellm.completion(
-        model=MODEL,
-        api_key=GEMINI_API_KEY,
-        messages=[
-            {"role": "system", "content": SUMMARIZE_PROMPT},
-            {"role": "user", "content": transcript},
-        ],
-        num_retries=3,
-    )
+    try:
+        response = litellm.completion(
+            model=MODEL,
+            api_key=GEMINI_API_KEY,
+            messages=[
+                {"role": "system", "content": SUMMARIZE_PROMPT},
+                {"role": "user", "content": transcript},
+            ],
+            num_retries=3,
+        )
+    except Exception as exc:
+        # turns stay pending and this retries after the next message
+        print(f"[summarize skipped] {describe_llm_error(exc)}")
+        return
     summary = response.choices[0].message.content.strip()
     memory.log_chat_summary(username, summary)
     session["pending_turns"] = []

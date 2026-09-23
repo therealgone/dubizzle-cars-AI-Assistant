@@ -141,12 +141,20 @@ user_message = st.chat_input("Ask about cars...")
 if user_message:
     st.session_state.messages.append(("user", user_message))
     with st.spinner("Thinking..."):
-        response = httpx.post(
-            f"{API_URL}/chat",
-            json={"username": st.session_state.username, "message": user_message},
-            timeout=120,
-        )
-    data = response.json()
+        try:
+            response = httpx.post(
+                f"{API_URL}/chat",
+                json={"username": st.session_state.username, "message": user_message},
+                timeout=120,
+            )
+            response.raise_for_status()
+            data = response.json()
+        except (httpx.HTTPError, ValueError):
+            data = {
+                "reply": "Sorry, I couldn't get a response -- the backend or the AI service is slow or unavailable. Please try again in a moment.",
+                "cars": st.session_state.last_cars,
+                "selected_car": st.session_state.selected_car,
+            }
     st.session_state.messages.append(("assistant", data["reply"]))
     st.session_state.last_cars = data.get("cars", [])
     # always sync to the server's real selection -- the LLM can change it

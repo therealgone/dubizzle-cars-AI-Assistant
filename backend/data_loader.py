@@ -4,6 +4,7 @@ from sentence_transformers import SentenceTransformer
 
 from backend.config import CHROMA_PATH, COLLECTION_NAME, EMBEDDING_MODEL
 from backend.enrichment import classify_batch, extract_price
+from backend.llm_client import describe_llm_error
 
 DATA_PATH = "data/cars_dataset.xlsx"
 SHEET_NAME = "cleaned dataset"
@@ -50,10 +51,17 @@ def run() -> None:
     records = df.to_dict("records")
 
     print("classifying body_type/color with the LLM...")
-    classifications = classify_batch(
-        [{"listing_id": int(r["Listing_ID"]), "make": r["make"], "model": r["model"],
-          "trim": r["trim"], "title": r["title"], "description": r["description"]} for r in records]
-    )
+    try:
+        classifications = classify_batch(
+            [{"listing_id": int(r["Listing_ID"]), "make": r["make"], "model": r["model"],
+              "trim": r["trim"], "title": r["title"], "description": r["description"]} for r in records]
+        )
+    except Exception as exc:
+        # nothing has been written to Chroma yet, so the next start simply retries
+        raise SystemExit(
+            f"\nCould not build the search index: {describe_llm_error(exc)}.\n"
+            "No data was written; fix the problem above and start again."
+        ) from exc
 
     client = chromadb.PersistentClient(path=CHROMA_PATH)
     if COLLECTION_NAME in [c.name for c in client.list_collections()]:
