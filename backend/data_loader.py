@@ -27,11 +27,14 @@ def build_metadata(row: dict, classification: dict) -> dict:
     metadata = {
         "listing_id": int(row["Listing_ID"]),
         "year": int(row["year"]),
-        "make": row["make"],
-        "model": row["model"],
-        "trim": row["trim"],
-        "title": row["title"],
-        "description": row["description"],
+        # str() -- pandas/Excel infers some cells as pure numbers (e.g. Mazda
+        # "3", trim "707"), leaving these fields inconsistently typed unless
+        # forced to text every time
+        "make": str(row["make"]),
+        "model": str(row["model"]),
+        "trim": str(row["trim"]),
+        "title": str(row["title"]),
+        "description": str(row["description"]),
         "photo_url": row["photo_url"],
         "body_type": classification["body_type"],
         "color": classification["color"],

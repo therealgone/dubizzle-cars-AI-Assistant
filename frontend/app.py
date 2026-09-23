@@ -12,6 +12,8 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "last_cars" not in st.session_state:
     st.session_state.last_cars = []
+if "selected_car" not in st.session_state:
+    st.session_state.selected_car = None
 
 if st.session_state.username is None:
     username_input = st.text_input("What's your name?")
@@ -23,18 +25,38 @@ if st.session_state.username is None:
 st.caption(f"Signed in as {st.session_state.username}")
 
 
-def render_car_card(car: dict, col) -> None:
+def render_search_card(car: dict, col) -> None:
+    # search-result cards: no favorite button here -- that only appears
+    # once a car is actually selected, not before
     with col:
         if car.get("photo_url"):
             st.image(car["photo_url"], use_container_width=True)
         st.markdown(f"**{car.get('title', 'Untitled listing')}**")
         price = car.get("price_aed")
         st.write(f"AED {price:,.0f}" if price else "Price not mentioned")
-        c1, c2 = st.columns(2)
-        if c1.button("Select", key=f"select_{car['listing_id']}"):
-            httpx.post(f"{API_URL}/select_car", json={"username": st.session_state.username, "listing_id": car["listing_id"]})
-            st.success(f"Selected {car['make']} {car['model']}")
-        if c2.button("Favorite", key=f"fav_{car['listing_id']}"):
+        if st.button("Select", key=f"select_{car['listing_id']}"):
+            response = httpx.post(f"{API_URL}/select_car", json={
+                "username": st.session_state.username, "listing_id": car["listing_id"],
+            })
+            st.session_state.selected_car = response.json()
+            st.rerun()
+
+
+def render_selected_car(car: dict) -> None:
+    st.subheader("Selected Car")
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        if car.get("photo_url"):
+            st.image(car["photo_url"], use_container_width=True)
+    with col2:
+        st.markdown(f"### {str(car.get('make', '')).title()} {str(car.get('model', '')).title()} {car.get('trim', '')}")
+        st.write(f"**Year:** {car.get('year')}")
+        st.write(f"**Body type:** {car.get('body_type')}")
+        st.write(f"**Color:** {car.get('color')}")
+        price = car.get("price_aed")
+        st.write(f"**Price:** AED {price:,.0f}" if price else "**Price:** Not mentioned")
+        st.caption(car.get("description", ""))
+        if st.button("Add to Favorites", key=f"fav_selected_{car['listing_id']}"):
             httpx.post(f"{API_URL}/manage_favorite", json={
                 "username": st.session_state.username, "listing_id": car["listing_id"], "action": "add",
             })
@@ -45,11 +67,14 @@ for role, content in st.session_state.messages:
     with st.chat_message(role):
         st.write(content)
 
+if st.session_state.selected_car and "error" not in st.session_state.selected_car:
+    render_selected_car(st.session_state.selected_car)
+
 if st.session_state.last_cars:
     st.subheader("Cars")
     cols = st.columns(3)
     for i, car in enumerate(st.session_state.last_cars):
-        render_car_card(car, cols[i % 3])
+        render_search_card(car, cols[i % 3])
 
 user_message = st.chat_input("Ask about cars...")
 if user_message:
