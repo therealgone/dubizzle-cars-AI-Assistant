@@ -158,6 +158,26 @@ TOOL_SCHEMAS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "compare_cars",
+            "description": (
+                "Get full details for specific listings by their exact listing_id, to "
+                "compare them. Use this instead of search_cars whenever the user refers to "
+                "cars you already know the listing_id for (e.g. from their selection "
+                "history, favorites, or cars shown earlier this conversation) -- searching "
+                "by name again risks matching a different, similarly-named listing."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "listing_ids": {"type": "array", "items": {"type": "integer"}},
+                },
+                "required": ["listing_ids"],
+            },
+        },
+    },
 ]
 
 
@@ -237,6 +257,10 @@ def tool_qualify_lead(username: str, session: dict, price_range: str, preference
     return {"status": "recorded"}
 
 
+def tool_compare_cars(username: str, session: dict, listing_ids: list[int]) -> list[dict]:
+    return _fetch_cars(listing_ids)
+
+
 TOOL_DISPATCH = {
     "search_cars": tool_search_cars,
     "select_car": tool_select_car,
@@ -245,13 +269,20 @@ TOOL_DISPATCH = {
     "get_chat_history": tool_get_chat_history,
     "manage_booking": tool_manage_booking,
     "qualify_lead": tool_qualify_lead,
+    "compare_cars": tool_compare_cars,
 }
 
 
 def call_tool(name: str, username: str, session: dict, arguments: dict):
     if name not in TOOL_DISPATCH:
         return {"error": f"unknown tool {name}"}
-    return TOOL_DISPATCH[name](username, session, **arguments)
+    try:
+        return TOOL_DISPATCH[name](username, session, **arguments)
+    except TypeError as e:
+        # the model passed an argument name/shape that doesn't match the
+        # tool's real signature -- tell it what went wrong instead of
+        # crashing the whole turn, so it can retry with a corrected call
+        return {"error": f"invalid arguments for {name}: {e}"}
 
 
 # ---------------------------------------------------------------------------
