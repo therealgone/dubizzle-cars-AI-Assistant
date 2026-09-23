@@ -74,12 +74,13 @@ with st.sidebar:
             label_visibility="collapsed",
         )
 
+dev_params = {"username": st.session_state.username}
 if dev_view == "Cached Memory":
-    st.subheader("Dev: Cached Memory (session_cache.json)")
-    st.json(httpx.get(f"{API_URL}/dev/session_cache").json())
+    st.subheader(f"Dev: Cached Memory for {st.session_state.username} (session_cache.json)")
+    st.json(httpx.get(f"{API_URL}/dev/session_cache", params=dev_params).json())
 elif dev_view == "Long-Term Memory":
-    st.subheader("Dev: Long-Term Memory (SQLite)")
-    for table, rows in httpx.get(f"{API_URL}/dev/long_term_memory").json().items():
+    st.subheader(f"Dev: Long-Term Memory for {st.session_state.username} (SQLite)")
+    for table, rows in httpx.get(f"{API_URL}/dev/long_term_memory", params=dev_params).json().items():
         st.markdown(f"**{table}** ({len(rows)} rows)")
         st.dataframe(rows, use_container_width=True)
 

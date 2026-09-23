@@ -134,12 +134,12 @@ def manage_favorite_endpoint(request: ManageFavoriteRequest) -> dict:
 
 
 @app.get("/dev/session_cache")
-def dev_session_cache() -> dict:
-    # dev-only inspection panel -- raw short-term cache, not for end users
-    return memory.get_full_session_cache()
+def dev_session_cache(username: str) -> dict:
+    # dev-only inspection panel -- this signed-in user's own cache, not everyone's
+    return memory.get_full_session_cache(username)
 
 
 @app.get("/dev/long_term_memory")
-def dev_long_term_memory() -> dict:
-    # dev-only inspection panel -- raw long-term SQLite tables
-    return memory.get_all_long_term_data()
+def dev_long_term_memory(username: str) -> dict:
+    # dev-only inspection panel -- this signed-in user's own SQLite rows only
+    return memory.get_all_long_term_data(username)

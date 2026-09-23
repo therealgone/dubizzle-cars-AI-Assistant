@@ -446,15 +446,20 @@ def update_selected_car(session: dict, car: dict | None) -> None:
     session["selected_car"] = car
 
 
-def get_full_session_cache() -> dict:
-    """Dev-only: the raw short-term cache file, every user at once."""
-    return _load_session_cache()
+def get_full_session_cache(username: str) -> dict:
+    """Dev-only: this signed-in user's own short-term cache entry."""
+    username = _normalize_username(username)
+    return _load_session_cache().get(username, {})
 
 
-def get_all_long_term_data() -> dict:
-    """Dev-only: every row in every long-term SQLite table."""
+def get_all_long_term_data(username: str) -> dict:
+    """Dev-only: this signed-in user's own rows in every long-term SQLite table."""
+    username = _normalize_username(username)
     conn = _connect()
     tables = ["user_profile", "car_interaction_log", "bookings", "chat_log_history"]
-    data = {table: [dict(row) for row in conn.execute(f"SELECT * FROM {table}").fetchall()] for table in tables}
+    data = {
+        table: [dict(row) for row in conn.execute(f"SELECT * FROM {table} WHERE username = ?", (username,)).fetchall()]
+        for table in tables
+    }
     conn.close()
     return data
