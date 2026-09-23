@@ -122,7 +122,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "manage_booking",
-            "description": "Create, reschedule, cancel, or list test-drive bookings. Bookings are only available Mon-Sat, 8am-9pm.",
+            "description": "Create, reschedule, cancel, or list test-drive bookings. Bookings are only available Mon-Sat, 8am-8pm.",
             "parameters": {
                 "type": "object",
                 "properties": {

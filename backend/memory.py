@@ -6,7 +6,7 @@ from datetime import datetime, time, timezone
 
 DB_PATH = "data/memory.db"
 BOOKING_OPEN = time(8, 0)
-BOOKING_CLOSE = time(21, 0)
+BOOKING_CLOSE = time(20, 0)
 SESSION_CACHE_PATH = "data/session_cache.json"
 CAR_STACK_LIMIT = 6
 RECENT_LOGS_LIMIT = 6
@@ -190,9 +190,14 @@ def is_valid_booking_slot(date_str: str, time_str: str) -> bool:
     return BOOKING_OPEN <= dt.time() <= BOOKING_CLOSE
 
 
+def _weekday(date_str: str) -> str:
+    # computed here, not left for the LLM to work out -- it gets this wrong
+    return datetime.strptime(date_str, "%Y-%m-%d").strftime("%A")
+
+
 def create_booking(username: str, listing_id: int, date_str: str, time_str: str) -> dict:
     if not is_valid_booking_slot(date_str, time_str):
-        raise ValueError("bookings are only available Mon-Sat, 8am-9pm")
+        raise ValueError("bookings are only available Mon-Sat, 8am-8pm")
     username = _normalize_username(username)
     now = _now()
     conn = _connect()
@@ -204,7 +209,7 @@ def create_booking(username: str, listing_id: int, date_str: str, time_str: str)
     conn.commit()
     booking_id = cur.lastrowid
     conn.close()
-    return {"id": booking_id, "username": username, "listing_id": listing_id, "date": date_str, "time": time_str, "status": "active"}
+    return {"id": booking_id, "username": username, "listing_id": listing_id, "date": date_str, "weekday": _weekday(date_str), "time": time_str, "status": "active"}
 
 
 def reschedule_booking(
@@ -227,7 +232,7 @@ def reschedule_booking(
 
     if not is_valid_booking_slot(new_date, new_time):
         conn.close()
-        raise ValueError("bookings are only available Mon-Sat, 8am-9pm")
+        raise ValueError("bookings are only available Mon-Sat, 8am-8pm")
 
     conn.execute(
         "UPDATE bookings SET date = ?, time = ?, listing_id = ?, updated_at = ? WHERE id = ?",
@@ -235,7 +240,7 @@ def reschedule_booking(
     )
     conn.commit()
     conn.close()
-    return {"id": booking_id, "listing_id": new_listing_id, "date": new_date, "time": new_time, "status": "active"}
+    return {"id": booking_id, "listing_id": new_listing_id, "date": new_date, "weekday": _weekday(new_date), "time": new_time, "status": "active"}
 
 
 def cancel_booking(booking_id: int) -> None:
@@ -257,7 +262,19 @@ def get_bookings(username: str, active_only: bool = True) -> list[dict]:
         query += " AND status = 'active'"
     rows = conn.execute(query, params).fetchall()
     conn.close()
-    return [dict(row) for row in rows]
+    bookings = [dict(row) for row in rows]
+    for b in bookings:
+        b["weekday"] = _weekday(b["date"])
+    return bookings
+
+
+def init_leads_csv() -> None:
+    """Business-side artifact -- exists permanently from server startup,
+    not only once the LLM first happens to qualify a lead."""
+    os.makedirs(os.path.dirname(LEADS_CSV_PATH), exist_ok=True)
+    if not os.path.exists(LEADS_CSV_PATH):
+        with open(LEADS_CSV_PATH, "w", newline="", encoding="utf-8") as f:
+            csv.DictWriter(f, fieldnames=LEADS_CSV_FIELDS).writeheader()
 
 
 def record_lead(username: str, price_range: str, preferences: str, notes: str = "") -> None:
@@ -266,12 +283,9 @@ def record_lead(username: str, price_range: str, preferences: str, notes: str = 
     gets overwritten. Meant to read like a real lead-tracking log: the same
     user can appear multiple times as their stated preferences evolve."""
     username = _normalize_username(username)
-    os.makedirs(os.path.dirname(LEADS_CSV_PATH), exist_ok=True)
-    file_exists = os.path.exists(LEADS_CSV_PATH)
+    init_leads_csv()
     with open(LEADS_CSV_PATH, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=LEADS_CSV_FIELDS)
-        if not file_exists:
-            writer.writeheader()
         writer.writerow({
             "timestamp": _now(),
             "username": username,
@@ -382,6 +396,17 @@ def save_session(username: str, session: dict) -> None:
     username = _normalize_username(username)
     cache = _load_session_cache()
     cache[username] = session
+    _save_session_cache(cache)
+
+
+def clear_session(username: str) -> None:
+    """Drops short-term state (filters, selected car, car stack, pending
+    turns) so the user starts a genuinely new session -- long-term SQLite
+    history/favorites/bookings are untouched, so the agent still recalls
+    them via tools."""
+    username = _normalize_username(username)
+    cache = _load_session_cache()
+    cache.pop(username, None)
     _save_session_cache(cache)
 
 

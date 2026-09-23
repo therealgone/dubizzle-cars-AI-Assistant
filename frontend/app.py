@@ -24,6 +24,13 @@ if st.session_state.username is None:
 
 st.caption(f"Signed in as {st.session_state.username}")
 
+with st.sidebar:
+    if st.button("Start New Session"):
+        httpx.post(f"{API_URL}/new_session", json={"username": st.session_state.username})
+        for key in ("username", "messages", "last_cars", "selected_car"):
+            del st.session_state[key]
+        st.rerun()
+
 
 def render_search_card(car: dict, col) -> None:
     # search-result cards: no favorite button here -- that only appears

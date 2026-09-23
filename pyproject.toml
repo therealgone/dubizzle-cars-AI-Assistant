@@ -1,7 +1,7 @@
 [project]
 name = "dubizzle-car-assistant"
 version = "0.1.0"
-description = "Add your description here"
+description = "AI car-shopping assistant for a dealership's used-car inventory"
 authors = [
     { name = "Jeevan Baabu", email = "jeevanbaabu03@gmail.com" }
 ]

@@ -134,7 +134,7 @@ print(f"\n{RULE}\nTOOL: manage_booking\n{RULE}")
 
 b1 = tools.call_tool("manage_booking", USERNAME, session,
                       {"action": "create", "listing_id": 38, "date": "2026-09-28", "time": "14:00"})  # Monday
-check("valid Mon-Sat 8am-9pm slot creates a booking", "id" in b1, str(b1))
+check("valid Mon-Sat 8am-8pm slot creates a booking", "id" in b1, str(b1))
 
 b2 = tools.call_tool("manage_booking", USERNAME, session,
                       {"action": "create", "listing_id": 38, "date": "2026-09-27", "time": "14:00"})  # Sunday

@@ -12,6 +12,7 @@ from backend.prompts import build_system_prompt
 
 app = FastAPI()
 memory.init_db()
+memory.init_leads_csv()
 
 MAX_TOOL_ITERATIONS = 5
 FALLBACK_REPLY = "Sorry, I'm having trouble with that -- could you try rephrasing?"
@@ -26,6 +27,10 @@ class ChatResponse(BaseModel):
     reply: str
     cars: list[dict] = []
     selected_car: dict | None = None
+
+
+class NewSessionRequest(BaseModel):
+    username: str
 
 
 class SelectCarRequest(BaseModel):
@@ -98,6 +103,15 @@ def chat(request: ChatRequest) -> ChatResponse:
     # tool call this turn or was already set from an earlier click/message --
     # the frontend syncs to this every time so it can never show stale data
     return ChatResponse(reply=reply, cars=cars, selected_car=session["selected_car"])
+
+
+@app.post("/new_session")
+def new_session_endpoint(request: NewSessionRequest) -> dict:
+    # simulates the user leaving and coming back later -- short-term state
+    # resets, long-term SQLite history/favorites/bookings survive
+    memory.get_or_create_user(request.username)
+    memory.clear_session(request.username)
+    return {"status": "reset"}
 
 
 @app.post("/select_car")
