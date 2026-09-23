@@ -1,9 +1,11 @@
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 
 DB_PATH = "data/memory.db"
+BOOKING_OPEN = time(8, 0)
+BOOKING_CLOSE = time(21, 0)
 SESSION_CACHE_PATH = "data/session_cache.json"
 CAR_STACK_LIMIT = 6
 RECENT_LOGS_LIMIT = 6
@@ -41,6 +43,20 @@ def init_db() -> None:
             timestamp TEXT NOT NULL,
             event_type TEXT NOT NULL,
             reason TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS bookings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            listing_id INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            time TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
         )
         """
     )
@@ -144,6 +160,82 @@ def get_recent_interactions(username: str, limit: int = 6) -> list[dict]:
         "WHERE username = ? ORDER BY timestamp DESC LIMIT ?",
         (username, limit),
     ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def get_recently_viewed(username: str, limit: int = 6) -> list[int]:
+    username = _normalize_username(username)
+    conn = _connect()
+    rows = conn.execute(
+        "SELECT listing_id FROM car_interaction_log "
+        "WHERE username = ? AND event_type = 'shown' ORDER BY timestamp DESC",
+        (username,),
+    ).fetchall()
+    conn.close()
+    seen: list[int] = []
+    for row in rows:
+        if row["listing_id"] not in seen:  # same car can be shown more than once
+            seen.append(row["listing_id"])
+        if len(seen) == limit:
+            break
+    return seen
+
+
+def is_valid_booking_slot(date_str: str, time_str: str) -> bool:
+    dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+    if dt.weekday() == 6:  # Sunday closed
+        return False
+    return BOOKING_OPEN <= dt.time() <= BOOKING_CLOSE
+
+
+def create_booking(username: str, listing_id: int, date_str: str, time_str: str) -> dict:
+    if not is_valid_booking_slot(date_str, time_str):
+        raise ValueError("bookings are only available Mon-Sat, 8am-9pm")
+    username = _normalize_username(username)
+    now = _now()
+    conn = _connect()
+    cur = conn.execute(
+        "INSERT INTO bookings (username, listing_id, date, time, status, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, 'active', ?, ?)",
+        (username, listing_id, date_str, time_str, now, now),
+    )
+    conn.commit()
+    booking_id = cur.lastrowid
+    conn.close()
+    return {"id": booking_id, "username": username, "listing_id": listing_id, "date": date_str, "time": time_str, "status": "active"}
+
+
+def reschedule_booking(booking_id: int, date_str: str, time_str: str) -> None:
+    if not is_valid_booking_slot(date_str, time_str):
+        raise ValueError("bookings are only available Mon-Sat, 8am-9pm")
+    conn = _connect()
+    conn.execute(
+        "UPDATE bookings SET date = ?, time = ?, updated_at = ? WHERE id = ?",
+        (date_str, time_str, _now(), booking_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def cancel_booking(booking_id: int) -> None:
+    conn = _connect()
+    conn.execute(
+        "UPDATE bookings SET status = 'cancelled', updated_at = ? WHERE id = ?",
+        (_now(), booking_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_bookings(username: str, active_only: bool = True) -> list[dict]:
+    username = _normalize_username(username)
+    conn = _connect()
+    query = "SELECT * FROM bookings WHERE username = ?"
+    params = [username]
+    if active_only:
+        query += " AND status = 'active'"
+    rows = conn.execute(query, params).fetchall()
     conn.close()
     return [dict(row) for row in rows]
 
