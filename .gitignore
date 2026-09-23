@@ -20,13 +20,11 @@ chroma_data/
 # Session/cache files
 .cache/
 *.session
-.claude/
 data/session_cache.json
 data/leads.csv
 
 # Working notes, not part of the deliverable
 PROGRESS.md
-CLAUDE.md
 *.tmp
 
 # Local-only files, not part of the submission
