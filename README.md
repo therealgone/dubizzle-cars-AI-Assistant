@@ -2,20 +2,6 @@
 
 An AI assistant that helps users explore a dubizzle car inventory through natural conversation, book test drive slots, and get qualified as sales leads — while remembering their preferences both within a session and across return visits.
 
-## Tech Stack
-
-| Layer | Choice |
-|---|---|
-| Backend | FastAPI |
-| Frontend | Streamlit |
-| LLM | Google Gemini (free tier), called via LiteLLM |
-| Vector store | Chroma |
-| Keyword search | BM25 (`rank_bm25`) |
-| Long-term memory | SQLite |
-| Short-term memory / cache | JSON |
-| Lead log | CSV |
-| Package management | uv |
-
 ## Setup & Running
 
 ### Prerequisites
@@ -25,8 +11,8 @@ An AI assistant that helps users explore a dubizzle car inventory through natura
 
 ### 1. Clone & install dependencies
 ```bash
-git clone <repo-url>
-cd dubizzle-car-assistant
+git clone https://github.com/therealgone/dubizzle-cars-AI-Assistant.git
+cd dubizzle-cars-AI-Assistant
 uv sync
 ```
 
@@ -186,42 +172,3 @@ The first three screenshots below were taken after restarting the app, so each s
 
 ![Recalling the saved preference](docs/screenshots/saved-filter-memory.png)
 *Recalling a saved preference: after an earlier search for a white SUV, "what if i don't want the color white it can be any color" keeps the SUV preference and only widens the color, returning SUVs in other colors (silver Ford Explorer, Land Rover Velar, Cayenne GTS and others).*
-
-## Testing
-
-`scripts/test_car_search.py` runs five retrieval cases against known ground truth (a plain make lookup, a substring match on "GCC", an exact make+model, a make plus a free-text attribute, and a very specific paint description) and reports each search method's results separately alongside the fused ranking. `scripts/test_tools.py` runs 39 checks across every tool, including deliberately adversarial cases: invalid booking slots, Sundays and after-hours, cancelling a nonexistent, already-cancelled or someone else's booking, malformed arguments, nonexistent listing IDs, favorites that are added and later removed, and limits on large result sets. Run either with `uv run python scripts/<name>.py`.
-
-## Project Structure
-
-```
-dubizzle-car-assistant/
-├── pyproject.toml
-├── uv.lock
-├── requirements.txt       # dependencies for pip users
-├── .env.example
-├── .python-version
-├── .streamlit/
-│   └── config.toml        # red/white dubizzle theme
-├── backend/
-│   ├── main.py            # FastAPI app: /chat, /select_car, /manage_favorite, /new_session, /dev/*
-│   ├── config.py          # environment/config loading
-│   ├── llm_client.py      # LiteLLM setup for Gemini calls
-│   ├── prompts.py         # system prompt: scope, guardrails, session context
-│   ├── car_search.py      # hybrid search: metadata filter + BM25 + semantic, RRF fusion
-│   ├── enrichment.py      # price regex + LLM body_type/color classification
-│   ├── data_loader.py     # ETL: reads the dataset, enriches, embeds, loads into Chroma
-│   ├── tools.py           # the 8 agent tools: schemas, dispatch, chat summarization
-│   └── memory.py          # SQLite long-term memory, JSON short-term cache, leads CSV
-├── data/
-│   └── cars_dataset.xlsx  # the provided listings
-├── frontend/
-│   ├── app.py             # Streamlit chat interface, sidebar dev panel
-│   └── assets/            # dubizzle logo and icon
-├── scripts/
-│   ├── test_car_search.py # retrieval tests with ground truth
-│   ├── test_tools.py      # tool-level tests, incl. adversarial cases
-│   └── test_llm.py        # smoke test for the LLM connection
-└── docs/
-    ├── demo_conversation_log.txt
-    └── screenshots/       # UI screenshots used in this README
-```

@@ -28,3 +28,8 @@ data/leads.csv
 PROGRESS.md
 CLAUDE.md
 *.tmp
+
+# Local-only files, not part of the submission
+architecture-diagram.drawio
+architecture-diagram.png
+scripts/
