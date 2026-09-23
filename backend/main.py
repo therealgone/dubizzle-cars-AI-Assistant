@@ -131,3 +131,15 @@ def manage_favorite_endpoint(request: ManageFavoriteRequest) -> dict:
     result = tools_module.tool_manage_favorite(request.username, session, action=request.action, listing_id=request.listing_id)
     memory.save_session(request.username, session)
     return result
+
+
+@app.get("/dev/session_cache")
+def dev_session_cache() -> dict:
+    # dev-only inspection panel -- raw short-term cache, not for end users
+    return memory.get_full_session_cache()
+
+
+@app.get("/dev/long_term_memory")
+def dev_long_term_memory() -> dict:
+    # dev-only inspection panel -- raw long-term SQLite tables
+    return memory.get_all_long_term_data()

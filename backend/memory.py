@@ -444,3 +444,17 @@ def update_active_filters(session: dict, new_fields: dict) -> dict:
 def update_selected_car(session: dict, car: dict | None) -> None:
     """Session-cache-only -- see update_active_filters."""
     session["selected_car"] = car
+
+
+def get_full_session_cache() -> dict:
+    """Dev-only: the raw short-term cache file, every user at once."""
+    return _load_session_cache()
+
+
+def get_all_long_term_data() -> dict:
+    """Dev-only: every row in every long-term SQLite table."""
+    conn = _connect()
+    tables = ["user_profile", "car_interaction_log", "bookings", "chat_log_history"]
+    data = {table: [dict(row) for row in conn.execute(f"SELECT * FROM {table}").fetchall()] for table in tables}
+    conn.close()
+    return data

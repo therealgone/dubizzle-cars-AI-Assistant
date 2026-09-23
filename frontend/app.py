@@ -67,6 +67,22 @@ with st.sidebar:
             del st.session_state[key]
         st.rerun()
 
+    st.divider()
+    with st.expander("Dev Testing"):
+        dev_view = st.radio(
+            "Dev view", ["Off", "Cached Memory", "Long-Term Memory"],
+            label_visibility="collapsed",
+        )
+
+if dev_view == "Cached Memory":
+    st.subheader("Dev: Cached Memory (session_cache.json)")
+    st.json(httpx.get(f"{API_URL}/dev/session_cache").json())
+elif dev_view == "Long-Term Memory":
+    st.subheader("Dev: Long-Term Memory (SQLite)")
+    for table, rows in httpx.get(f"{API_URL}/dev/long_term_memory").json().items():
+        st.markdown(f"**{table}** ({len(rows)} rows)")
+        st.dataframe(rows, use_container_width=True)
+
 
 def render_search_card(car: dict, col) -> None:
     # search-result cards: no favorite button here -- that only appears
