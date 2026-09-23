@@ -1,10 +1,14 @@
+import base64
+
 import httpx
 import streamlit as st
 
 API_URL = "http://localhost:8000"
 LOGO_PATH = "frontend/assets/dubizzle_logo.png"
-ICON_PATH = "frontend/assets/dubizzle_icon.jpg"
+ICON_PATH = "frontend/assets/dubizzle_icon.png"
 ACCENT = "#ED1C24"
+with open(LOGO_PATH, "rb") as f:
+    LOGO_B64 = base64.b64encode(f.read()).decode()
 GREETING = "Hello! Welcome to dubizzle. What car are you looking for today?"
 
 st.set_page_config(page_title="dubizzle | Car Shopping Assistant", page_icon=ICON_PATH, layout="wide")
@@ -24,6 +28,15 @@ st.markdown(
 )
 st.markdown('<div class="dubizzle-topbar"></div>', unsafe_allow_html=True)
 
+
+def show_logo(width: int, align: str = "left") -> None:
+    # raw <img> so the browser scales the 4x source down smoothly and text-align can centre it
+    st.markdown(
+        f'<div style="text-align:{align}"><img src="data:image/png;base64,{LOGO_B64}" width="{width}"></div>',
+        unsafe_allow_html=True,
+    )
+
+
 if "username" not in st.session_state:
     st.session_state.username = None
 if "messages" not in st.session_state:
@@ -36,7 +49,7 @@ if "selected_car" not in st.session_state:
 if st.session_state.username is None:
     _, center, _ = st.columns([1, 1, 1])
     with center:
-        st.image(LOGO_PATH, width=220)
+        show_logo(220, "center")
         st.markdown(
             "<p style='text-align:center; color:#555;'>AI car-shopping assistant</p>",
             unsafe_allow_html=True,
@@ -51,7 +64,7 @@ if st.session_state.username is None:
 
 header_left, header_right = st.columns([3, 1])
 with header_left:
-    st.image(LOGO_PATH, width=140)
+    show_logo(140)
 with header_right:
     st.markdown(
         f"<p style='text-align:right; padding-top: 1.2rem; color:#555;'>Signed in as <b>{st.session_state.username}</b></p>",
@@ -59,7 +72,7 @@ with header_right:
     )
 
 with st.sidebar:
-    st.image(LOGO_PATH, width=160)
+    show_logo(160)
     st.divider()
     if st.button("Start New Session", use_container_width=True):
         httpx.post(f"{API_URL}/new_session", json={"username": st.session_state.username})
