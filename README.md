@@ -30,6 +30,13 @@ cd dubizzle-car-assistant
 uv sync
 ```
 
+**Without uv:** `requirements.txt` lists the same dependencies for plain pip. Create a virtual environment, install into it, and drop the `uv run` prefix from every command below (run `python`, `uvicorn` and `streamlit` from inside the activated environment instead):
+```bash
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
 ### 2. Configure your API key
 ```bash
 cp .env.example .env
@@ -119,6 +126,7 @@ A terminal log of a live run against the backend is in [`docs/demo_conversation_
 dubizzle-car-assistant/
 ├── pyproject.toml
 ├── uv.lock
+├── requirements.txt       # dependencies for pip users
 ├── .env.example
 ├── .python-version
 ├── .streamlit/
