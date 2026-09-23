@@ -1,0 +1,67 @@
+======================================================================
+PART 1 -- multi-turn conversation exploring the inventory
+======================================================================
+
+USER: I'm looking for a white SUV under 100000 AED
+
+ASSISTANT: We have a few white SUVs (and options within your budget) available right now:
+
+1. **2017 Nissan X-Trail (SL)**
+   - **Color:** White
+   - **Body Type:** SUV
+   - **Price:** Price not mentioned
+   - **Listing ID:** 23
+
+2. **2014 Audi Q7 (55 TFSI Quattro S Line)**
+   - **Color:** White
+   - **Body Type:** SUV
+   - **Price:** Price not mentioned
+   - **Listing ID:** 64
+
+3. **2010 Mitsubishi Pajero (GLS)**
+   - **Color:** White
+   - **Body Type:** SUV
+   - **Price:** Price not mentioned
+   - **Listing ID:** 48
+
+4. **2023 Toyota Wildlander AWD**
+   - **Color:** Not mentioned (listed under our white SUV search)
+   - **Body Type:** SUV
+   - **Price:** 95,000 AED
+   - **Listing ID:** 95
+
+Would you like to compare any of these, or would you like to schedule a test drive for one of them?
+
+[5 cars returned by search_cars]
+
+USER: How many seats does that Audi have?
+
+ASSISTANT: That Audi Q7 has **7 seats**.
+
+USER: Select the Audi and add it to my favorites
+
+ASSISTANT: I've selected the 2014 Audi Q7 (Listing ID: 64) and added it to your favorites! 
+
+Let me know if you would like to compare it with any other cars or schedule a test drive.
+
+[selected_car after this turn: audi q7 (listing_id=64)]
+
+USER: Book a test drive for the Audi this Saturday at 11am
+
+ASSISTANT: Your test drive for the 2014 Audi Q7 (Listing ID: 64) is successfully booked for this Saturday, September 26, 2026, at 11:00 AM! Let me know if you need anything else before your visit.
+
+======================================================================
+PART 2 -- returning user in a brand-new session
+======================================================================
+
+[POST /new_session -> {'status': 'reset'}]
+[short-term session cache cleared -- filters, selected car, car stack, and chat
+ turns are gone. Only long-term SQLite history/favorites/bookings remain.]
+
+USER: Hey, it's me again. What car did I favorite last time, and do I have any upcoming test drives?
+
+ASSISTANT: The last car you favorited is the **2014 Audi Q7** (55 TFSI Quattro S Line in white). 
+
+You also have one upcoming test drive scheduled for that car:
+* **Date:** Saturday, September 26, 2026
+* **Time:** 11:00 AM
