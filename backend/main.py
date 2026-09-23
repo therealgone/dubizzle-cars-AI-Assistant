@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 import backend.memory as memory
 import backend.tools as tools_module
+from backend.car_search import search_cars
 from backend.config import GEMINI_API_KEY
 from backend.llm_client import MODEL, describe_llm_error
 from backend.prompts import build_system_prompt
@@ -169,6 +170,27 @@ def manage_favorite_endpoint(request: ManageFavoriteRequest) -> dict:
         result = tools_module.tool_manage_favorite(request.username, session, action=request.action, listing_id=request.listing_id)
         memory.save_session(request.username, session)
     return result
+
+
+@app.get("/search")
+def search_endpoint(
+    make: str | None = None,
+    model: str | None = None,
+    trim: str | None = None,
+    year: int | None = None,
+    body_type: str | None = None,
+    color: str | None = None,
+    description: str | None = None,
+    keywords: str | None = None,
+    semantic_query: str | None = None,
+    top_k: int = 5,
+) -> list[dict]:
+    # direct inventory retrieval with structured parameters and no LLM; same search the
+    # chat tool uses, but stateless -- it never touches any user's session or history
+    fields = dict(make=make, model=model, trim=trim, year=year, body_type=body_type,
+                  color=color, description=description)
+    filters = {name: value for name, value in fields.items() if value is not None}
+    return search_cars(filters=filters, keywords=keywords, semantic_query=semantic_query, top_k=top_k)
 
 
 @app.get("/dev/session_cache")
