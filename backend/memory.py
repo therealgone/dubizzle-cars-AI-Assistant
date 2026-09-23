@@ -9,6 +9,7 @@ BOOKING_CLOSE = time(21, 0)
 SESSION_CACHE_PATH = "data/session_cache.json"
 CAR_STACK_LIMIT = 6
 RECENT_LOGS_LIMIT = 6
+PENDING_TURNS_LIMIT = 6
 
 
 def _normalize_username(username: str) -> str:
@@ -324,7 +325,13 @@ def get_session(username: str) -> dict:
     cache = _load_session_cache()
     return cache.get(
         username,
-        {"current_active_filters": {}, "recent_logs": [], "car_stack": [], "selected_car": None},
+        {
+            "current_active_filters": {},
+            "recent_logs": [],
+            "car_stack": [],
+            "selected_car": None,
+            "pending_turns": [],
+        },
     )
 
 
@@ -343,6 +350,18 @@ def push_car_stack(session: dict, cars: list[dict]) -> dict:
 def push_recent_log(session: dict, summary: str) -> dict:
     session["recent_logs"] = (session["recent_logs"] + [summary])[-RECENT_LOGS_LIMIT:]
     return session
+
+
+def add_pending_turn(session: dict, user_message: str, assistant_response: str) -> dict:
+    """Raw, unsummarized turns waiting to be batch-summarized. Not capped by
+    FIFO like car_stack/recent_logs -- ready_to_summarize() clears it out
+    entirely once full, it doesn't quietly drop the oldest."""
+    session["pending_turns"].append({"user": user_message, "assistant": assistant_response})
+    return session
+
+
+def ready_to_summarize(session: dict) -> bool:
+    return len(session["pending_turns"]) >= PENDING_TURNS_LIMIT
 
 
 def update_active_filters(session: dict, new_fields: dict) -> dict:
