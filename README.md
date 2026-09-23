@@ -60,6 +60,11 @@ Opens at `http://localhost:8501`. Enter a name to sign in — signing in again l
 ![Search results](docs/screenshots/search-results.png)
 *Asking for "a white SUV": the assistant lists the matches and the result cards below come straight from the hybrid search.*
 
+Asking to "show more" re-runs the same search with a higher `top_k` rather than a fresh query, so the ranking stays stable and the extra listings extend the same result set instead of returning a different mix.
+
+![Show more search results](docs/screenshots/Search-Filter-Show-More.png)
+*Asking to "show more": the same search is re-run with a higher result count, extending the list with the next-ranked matches.*
+
 **Memory — dual-tier, short-term JSON + long-term SQLite.** Long-term memory lives in SQLite with four tables: a user profile (the returning-user check), a permanent append-only log of every car the user was shown, selected, favorited or unfavorited, their test drive bookings, and a chat history that is summarized by the LLM every 6 exchanges rather than stored raw, to keep later context meaningful without burning tokens. Short-term memory is a JSON cache holding the session's live state: the active search filters, the currently selected car, the last 6 cars shown (a FIFO stack), and the raw chat turns not yet summarized. Each turn, the selected car, active filters and recently shown cars are injected into the system prompt and the unsummarized turns are replayed as message history, so follow-ups like "how many seats does that Audi have?" resolve without the user restating anything; anything older is looked up from SQLite through tools on demand. The JSON cache isn't auto-expiring — it persists on disk across requests, which is why the UI includes an explicit "Start New Session" button that clears the signed-in user's cache (and only theirs), leaving SQLite untouched, to demonstrate a returning user in a genuinely fresh session.
 
 ![Cached memory in the dev panel](docs/screenshots/cached-memory.png)
