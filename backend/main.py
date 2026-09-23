@@ -11,6 +11,7 @@ from backend.llm_client import MODEL
 from backend.prompts import build_system_prompt
 
 app = FastAPI()
+memory.init_db()
 
 MAX_TOOL_ITERATIONS = 5
 FALLBACK_REPLY = "Sorry, I'm having trouble with that -- could you try rephrasing?"
