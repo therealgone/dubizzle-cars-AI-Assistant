@@ -3,6 +3,7 @@ import pandas as pd
 from sentence_transformers import SentenceTransformer
 
 from backend.config import CHROMA_PATH, COLLECTION_NAME, EMBEDDING_MODEL
+from backend.enrichment import classify_batch, extract_price
 
 DATA_PATH = "data/cars_dataset.xlsx"
 SHEET_NAME = "cleaned dataset"
@@ -22,9 +23,34 @@ def chunk(rows: list[dict], size: int) -> list[list[dict]]:
     return [rows[i : i + size] for i in range(0, len(rows), size)]
 
 
+def build_metadata(row: dict, classification: dict) -> dict:
+    metadata = {
+        "listing_id": int(row["Listing_ID"]),
+        "year": int(row["year"]),
+        "make": row["make"],
+        "model": row["model"],
+        "trim": row["trim"],
+        "title": row["title"],
+        "description": row["description"],
+        "photo_url": row["photo_url"],
+        "body_type": classification["body_type"],
+        "color": classification["color"],
+    }
+    price = extract_price(f"{row['title']} {row['description']}")
+    if price is not None:
+        metadata["price_aed"] = price
+    return metadata
+
+
 def run() -> None:
     df = load_listings()
     records = df.to_dict("records")
+
+    print("classifying body_type/color with the LLM...")
+    classifications = classify_batch(
+        [{"listing_id": int(r["Listing_ID"]), "make": r["make"], "model": r["model"],
+          "trim": r["trim"], "title": r["title"], "description": r["description"]} for r in records]
+    )
 
     client = chromadb.PersistentClient(path=CHROMA_PATH)
     if COLLECTION_NAME in [c.name for c in client.list_collections()]:
@@ -42,16 +68,7 @@ def run() -> None:
             embeddings=embeddings,
             documents=search_texts,
             metadatas=[
-                {
-                    "listing_id": int(r["Listing_ID"]),
-                    "year": int(r["year"]),
-                    "make": r["make"],
-                    "model": r["model"],
-                    "trim": r["trim"],
-                    "title": r["title"],
-                    "description": r["description"],
-                    "photo_url": r["photo_url"],
-                }
+                build_metadata(r, classifications[int(r["Listing_ID"])])
                 for r in batch
             ],
         )
