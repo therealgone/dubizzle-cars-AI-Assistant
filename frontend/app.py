@@ -88,4 +88,7 @@ if user_message:
     data = response.json()
     st.session_state.messages.append(("assistant", data["reply"]))
     st.session_state.last_cars = data.get("cars", [])
+    # always sync to the server's real selection -- the LLM can change it
+    # mid-chat (e.g. while booking), not just via the Select button click
+    st.session_state.selected_car = data.get("selected_car")
     st.rerun()

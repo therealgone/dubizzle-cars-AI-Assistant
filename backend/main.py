@@ -25,6 +25,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     cars: list[dict] = []
+    selected_car: dict | None = None
 
 
 class SelectCarRequest(BaseModel):
@@ -71,7 +72,10 @@ def run_chat_turn(username: str, session: dict, user_message: str) -> tuple[str,
         for tc in msg.tool_calls:
             args = json.loads(tc.function.arguments)
             result = tools_module.call_tool(tc.function.name, username, session, args)
-            if isinstance(result, list) and result and "listing_id" in result[0]:
+            # "make" is unique to car dicts -- booking dicts also have
+            # listing_id, which used to cause bookings to render as broken,
+            # empty car cards ("Untitled listing")
+            if isinstance(result, list) and result and "make" in result[0]:
                 cars_this_turn = result
             messages.append({
                 "role": "tool",
@@ -90,7 +94,10 @@ def chat(request: ChatRequest) -> ChatResponse:
     session = memory.get_session(request.username)
     reply, cars = run_chat_turn(request.username, session, request.message)
     memory.save_session(request.username, session)
-    return ChatResponse(reply=reply, cars=cars)
+    # always return the true current selection, whether it changed via a
+    # tool call this turn or was already set from an earlier click/message --
+    # the frontend syncs to this every time so it can never show stale data
+    return ChatResponse(reply=reply, cars=cars, selected_car=session["selected_car"])
 
 
 @app.post("/select_car")
