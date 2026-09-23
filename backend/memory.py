@@ -1,3 +1,4 @@
+import csv
 import json
 import os
 import sqlite3
@@ -10,6 +11,8 @@ SESSION_CACHE_PATH = "data/session_cache.json"
 CAR_STACK_LIMIT = 6
 RECENT_LOGS_LIMIT = 6
 PENDING_TURNS_LIMIT = 6
+LEADS_CSV_PATH = "data/leads.csv"
+LEADS_CSV_FIELDS = ["timestamp", "username", "price_range", "preferences", "notes"]
 
 
 def _normalize_username(username: str) -> str:
@@ -255,6 +258,27 @@ def get_bookings(username: str, active_only: bool = True) -> list[dict]:
     rows = conn.execute(query, params).fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+
+def record_lead(username: str, price_range: str, preferences: str, notes: str = "") -> None:
+    """Append-only, shared across all users -- one row per qualifying moment
+    (e.g. budget + at least one preference known), not a single row that
+    gets overwritten. Meant to read like a real lead-tracking log: the same
+    user can appear multiple times as their stated preferences evolve."""
+    username = _normalize_username(username)
+    os.makedirs(os.path.dirname(LEADS_CSV_PATH), exist_ok=True)
+    file_exists = os.path.exists(LEADS_CSV_PATH)
+    with open(LEADS_CSV_PATH, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=LEADS_CSV_FIELDS)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow({
+            "timestamp": _now(),
+            "username": username,
+            "price_range": price_range,
+            "preferences": preferences,
+            "notes": notes,
+        })
 
 
 def log_chat_summary(username: str, summary: str) -> None:

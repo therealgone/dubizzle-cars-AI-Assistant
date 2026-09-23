@@ -22,6 +22,7 @@ chroma_data/
 *.session
 .claude/
 data/session_cache.json
+data/leads.csv
 
 # Working notes, not part of the deliverable
 PROGRESS.md

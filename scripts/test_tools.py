@@ -1,3 +1,5 @@
+import csv
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -78,6 +80,15 @@ tools.call_tool("manage_favorite", USERNAME, session, {"listing_id": 100, "actio
 tools.call_tool("manage_favorite", USERNAME, session, {"listing_id": 38, "action": "remove"})
 favs = memory.get_favorites(USERNAME)
 check("add-then-remove resolves correctly (only 100 stays favorited)", favs == [100], str(favs))
+
+# hard case: "show me all my favorites" -- must be full car details, not bare ids,
+# and must not include the one that was added then removed
+tools.call_tool("manage_favorite", USERNAME, session, {"listing_id": 17, "action": "add"})
+listed = tools.call_tool("manage_favorite", USERNAME, session, {"action": "list"})
+check("list action returns full car details, not just ids",
+      all("make" in car for car in listed), str(listed))
+check("list action excludes the favorite that was later removed (38)",
+      {c["listing_id"] for c in listed} == {100, 17}, str([c["listing_id"] for c in listed]))
 
 print(f"\n{RULE}\nTOOL: search_history\n{RULE}")
 
@@ -171,6 +182,32 @@ check("default limit (10) caps results even though more exist", len(default_limi
 everything_selected = tools.call_tool("search_history", USERNAME, session, {"event_types": ["selected"], "limit": 100})
 check("limit override surfaces every selected car, not just the default 10",
       len(everything_selected) >= len(fresh_ids), f"got {len(everything_selected)}")
+
+print(f"\n{RULE}\nTOOL: qualify_lead\n{RULE}")
+
+if os.path.exists(memory.LEADS_CSV_PATH):
+    os.remove(memory.LEADS_CSV_PATH)  # clean slate so row counts below are exact
+
+tools.call_tool("qualify_lead", USERNAME, session,
+                {"price_range": "around 80000 AED", "preferences": "SUV, mercedes-benz preferred"})
+# same user, evolved preferences later in the conversation -- must APPEND, not overwrite
+tools.call_tool("qualify_lead", USERNAME, session,
+                {"price_range": "around 100000 AED", "preferences": "SUV, now open to ford explorer too", "notes": "family of 5, needs 3rd row"})
+# a second, different user -- shared file, not per-user
+tools.call_tool("qualify_lead", "otheruser", session,
+                {"price_range": "150000 AED", "preferences": "sports car, ferrari or lamborghini"})
+
+with open(memory.LEADS_CSV_PATH, newline="", encoding="utf-8") as f:
+    rows = list(csv.DictReader(f))
+
+check("leads.csv has exactly one header + 3 data rows (append-only, not overwritten)", len(rows) == 3, f"got {len(rows)} rows")
+check("same user appears twice with evolved preferences, not one overwritten row",
+      sum(1 for r in rows if r["username"] == USERNAME) == 2,
+      str([r["preferences"] for r in rows if r["username"] == USERNAME]))
+check("leads.csv is shared across users, not per-user",
+      any(r["username"] == "otheruser" for r in rows), str([r["username"] for r in rows]))
+check("notes field carries through correctly",
+      any("3rd row" in r["notes"] for r in rows), str([r["notes"] for r in rows]))
 
 print(f"\n{RULE}\nBATCH CHAT SUMMARIZATION (1 real LLM call)\n{RULE}")
 

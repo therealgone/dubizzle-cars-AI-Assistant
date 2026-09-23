@@ -72,14 +72,14 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "manage_favorite",
-            "description": "Add or remove a listing from the user's favorites.",
+            "description": "Add, remove, or list every car the user has ever favorited.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "listing_id": {"type": "integer"},
-                    "action": {"type": "string", "enum": ["add", "remove"]},
+                    "listing_id": {"type": "integer", "description": "required for add/remove, omit for list"},
+                    "action": {"type": "string", "enum": ["add", "remove", "list"]},
                 },
-                "required": ["listing_id", "action"],
+                "required": ["action"],
             },
         },
     },
@@ -136,6 +136,28 @@ TOOL_SCHEMAS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "qualify_lead",
+            "description": (
+                "Record this user as a sales lead once you know their budget AND at least "
+                "one other preference (make, body type, etc). Call again whenever their "
+                "stated preferences meaningfully change or grow -- this is an append-only "
+                "log, not a profile you overwrite, so each call adds a new record of where "
+                "their interest stood at that point."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "price_range": {"type": "string", "description": "the user's stated budget, in their own words, e.g. 'around 100k AED' or '50000-80000 AED'"},
+                    "preferences": {"type": "string", "description": "what they're looking for, e.g. 'SUV, Mercedes-Benz preferred, black or white'"},
+                    "notes": {"type": "string", "description": "anything else relevant -- financing interest, urgency, family size, etc."},
+                },
+                "required": ["price_range", "preferences"],
+            },
+        },
+    },
 ]
 
 
@@ -146,6 +168,14 @@ TOOL_SCHEMAS = [
 def _fetch_car(listing_id: int) -> dict | None:
     fetched = _collection.get(ids=[str(listing_id)], include=["metadatas"])
     return fetched["metadatas"][0] if fetched["metadatas"] else None
+
+
+def _fetch_cars(listing_ids: list[int]) -> list[dict]:
+    if not listing_ids:
+        return []
+    fetched = _collection.get(ids=[str(i) for i in listing_ids], include=["metadatas"])
+    by_id = {int(i): m for i, m in zip(fetched["ids"], fetched["metadatas"])}
+    return [by_id[i] for i in listing_ids if i in by_id]
 
 
 def tool_search_cars(username: str, session: dict, filters: dict | None = None,
@@ -168,7 +198,9 @@ def tool_select_car(username: str, session: dict, listing_id: int) -> dict:
     return car
 
 
-def tool_manage_favorite(username: str, session: dict, listing_id: int, action: str) -> dict:
+def tool_manage_favorite(username: str, session: dict, action: str, listing_id: int | None = None) -> dict | list[dict]:
+    if action == "list":
+        return _fetch_cars(memory.get_favorites(username))
     event = "favorited" if action == "add" else "unfavorited"
     memory.log_interaction(username, listing_id, event)
     return {"listing_id": listing_id, "favorited": action == "add"}
@@ -200,6 +232,11 @@ def tool_manage_booking(username: str, session: dict, action: str, listing_id: i
         return {"error": str(e)}
 
 
+def tool_qualify_lead(username: str, session: dict, price_range: str, preferences: str, notes: str = "") -> dict:
+    memory.record_lead(username, price_range=price_range, preferences=preferences, notes=notes)
+    return {"status": "recorded"}
+
+
 TOOL_DISPATCH = {
     "search_cars": tool_search_cars,
     "select_car": tool_select_car,
@@ -207,6 +244,7 @@ TOOL_DISPATCH = {
     "search_history": tool_search_history,
     "get_chat_history": tool_get_chat_history,
     "manage_booking": tool_manage_booking,
+    "qualify_lead": tool_qualify_lead,
 }
 
 
