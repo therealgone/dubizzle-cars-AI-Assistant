@@ -204,16 +204,35 @@ def create_booking(username: str, listing_id: int, date_str: str, time_str: str)
     return {"id": booking_id, "username": username, "listing_id": listing_id, "date": date_str, "time": time_str, "status": "active"}
 
 
-def reschedule_booking(booking_id: int, date_str: str, time_str: str) -> None:
-    if not is_valid_booking_slot(date_str, time_str):
-        raise ValueError("bookings are only available Mon-Sat, 8am-9pm")
+def reschedule_booking(
+    booking_id: int,
+    date_str: str | None = None,
+    time_str: str | None = None,
+    listing_id: int | None = None,
+) -> dict:
+    """Change the time, the car, or both -- whatever's given overrides,
+    whatever's omitted keeps its current value."""
     conn = _connect()
+    row = conn.execute("SELECT * FROM bookings WHERE id = ?", (booking_id,)).fetchone()
+    if row is None:
+        conn.close()
+        raise ValueError(f"no booking with id {booking_id}")
+
+    new_date = date_str or row["date"]
+    new_time = time_str or row["time"]
+    new_listing_id = listing_id if listing_id is not None else row["listing_id"]
+
+    if not is_valid_booking_slot(new_date, new_time):
+        conn.close()
+        raise ValueError("bookings are only available Mon-Sat, 8am-9pm")
+
     conn.execute(
-        "UPDATE bookings SET date = ?, time = ?, updated_at = ? WHERE id = ?",
-        (date_str, time_str, _now(), booking_id),
+        "UPDATE bookings SET date = ?, time = ?, listing_id = ?, updated_at = ? WHERE id = ?",
+        (new_date, new_time, new_listing_id, _now(), booking_id),
     )
     conn.commit()
     conn.close()
+    return {"id": booking_id, "listing_id": new_listing_id, "date": new_date, "time": new_time, "status": "active"}
 
 
 def cancel_booking(booking_id: int) -> None:

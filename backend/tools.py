@@ -96,6 +96,10 @@ TOOL_SCHEMAS = [
                         "type": "array",
                         "items": {"type": "string", "enum": ["selected", "favorited"]},
                     },
+                    "limit": {
+                        "type": "integer",
+                        "description": "max results, default 10. Raise this when the user asks for 'all' the cars they've selected or favorited.",
+                    },
                 },
             },
         },
@@ -123,10 +127,10 @@ TOOL_SCHEMAS = [
                 "type": "object",
                 "properties": {
                     "action": {"type": "string", "enum": ["create", "reschedule", "cancel", "list"]},
-                    "listing_id": {"type": "integer", "description": "required for create"},
+                    "listing_id": {"type": "integer", "description": "required for create; for reschedule, only pass this if the user wants to change WHICH CAR the booking is for"},
                     "booking_id": {"type": "integer", "description": "required for reschedule/cancel"},
-                    "date": {"type": "string", "description": "YYYY-MM-DD, required for create/reschedule"},
-                    "time": {"type": "string", "description": "HH:MM 24h, required for create/reschedule"},
+                    "date": {"type": "string", "description": "YYYY-MM-DD, required for create; for reschedule, only pass this if the user wants to change the date"},
+                    "time": {"type": "string", "description": "HH:MM 24h, required for create; for reschedule, only pass this if the user wants to change the time"},
                 },
                 "required": ["action"],
             },
@@ -171,8 +175,8 @@ def tool_manage_favorite(username: str, session: dict, listing_id: int, action: 
 
 
 def tool_search_history(username: str, session: dict, keyword: str | None = None,
-                         event_types: list[str] | None = None) -> list[dict]:
-    return memory.search_history(username, keyword=keyword, event_types=event_types)
+                         event_types: list[str] | None = None, limit: int = 10) -> list[dict]:
+    return memory.search_history(username, keyword=keyword, event_types=event_types, limit=limit)
 
 
 def tool_get_chat_history(username: str, session: dict, on_date: str | None = None, limit: int = 20) -> list[dict]:
@@ -185,8 +189,7 @@ def tool_manage_booking(username: str, session: dict, action: str, listing_id: i
         if action == "create":
             return memory.create_booking(username, listing_id, date, time)
         if action == "reschedule":
-            memory.reschedule_booking(booking_id, date, time)
-            return {"booking_id": booking_id, "status": "rescheduled"}
+            return memory.reschedule_booking(booking_id, date, time, listing_id=listing_id)
         if action == "cancel":
             memory.cancel_booking(booking_id)
             return {"booking_id": booking_id, "status": "cancelled"}

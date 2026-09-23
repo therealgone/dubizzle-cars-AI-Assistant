@@ -144,6 +144,34 @@ tools.call_tool("manage_booking", USERNAME, session, {"action": "cancel", "booki
 active_after_cancel = tools.call_tool("manage_booking", USERNAME, session, {"action": "list"})
 check("cancel removes it from the active list", active_after_cancel == [], str(active_after_cancel))
 
+# hard case: change WHICH CAR a booking is for, keeping the same date/time --
+# this was a real gap (reschedule only ever touched date/time before)
+b4 = tools.call_tool("manage_booking", USERNAME, session,
+                      {"action": "create", "listing_id": 38, "date": "2026-09-28", "time": "16:00"})
+tools.call_tool("manage_booking", USERNAME, session,
+                 {"action": "reschedule", "booking_id": b4["id"], "listing_id": 100})  # no date/time given
+after_car_swap = tools.call_tool("manage_booking", USERNAME, session, {"action": "list"})
+swapped = next(b for b in after_car_swap if b["id"] == b4["id"])
+check("reschedule can change just the car, keeping the original time",
+      swapped["listing_id"] == 100 and swapped["time"] == "16:00", str(swapped))
+tools.call_tool("manage_booking", USERNAME, session, {"action": "cancel", "booking_id": b4["id"]})
+
+print(f"\n{RULE}\nTOOL: search_history limit override\n{RULE}")
+
+# hard case: user has more distinct selected cars than the default limit (10) --
+# "show me every car I've ever selected" must not silently truncate
+fresh_ids = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]  # 12 distinct, none touched earlier in this run
+for lid in fresh_ids:
+    car = tools._fetch_car(lid)
+    memory.select_car(USERNAME, session, car)
+
+default_limited = tools.call_tool("search_history", USERNAME, session, {"event_types": ["selected"]})
+check("default limit (10) caps results even though more exist", len(default_limited) == 10, f"got {len(default_limited)}")
+
+everything_selected = tools.call_tool("search_history", USERNAME, session, {"event_types": ["selected"], "limit": 100})
+check("limit override surfaces every selected car, not just the default 10",
+      len(everything_selected) >= len(fresh_ids), f"got {len(everything_selected)}")
+
 print(f"\n{RULE}\nBATCH CHAT SUMMARIZATION (1 real LLM call)\n{RULE}")
 
 fake_turns = [
