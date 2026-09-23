@@ -29,6 +29,20 @@ print("TOOL BENCHMARK SUITE")
 print(BORDER)
 
 memory.init_db()
+
+
+def reset_test_users():
+    # start from a clean slate so the suite gives the same answer on every run
+    conn = memory._connect()
+    for name in (USERNAME, "otheruser_cancel_test"):
+        for table in ("user_profile", "car_interaction_log", "bookings", "chat_log_history"):
+            conn.execute(f"DELETE FROM {table} WHERE username = ?", (name,))
+        memory.clear_session(name)
+    conn.commit()
+    conn.close()
+
+
+reset_test_users()
 session = memory.get_session(USERNAME)
 
 print(f"\n{RULE}\nTOOL: search_cars\n{RULE}")
@@ -151,9 +165,23 @@ active = tools.call_tool("manage_booking", USERNAME, session, {"action": "list"}
 check("reschedule applied correctly",
       active[0]["date"] == "2026-09-29" and active[0]["time"] == "10:00", str(active))
 
-tools.call_tool("manage_booking", USERNAME, session, {"action": "cancel", "booking_id": booking_id})
+cancelled = tools.call_tool("manage_booking", USERNAME, session, {"action": "cancel", "booking_id": booking_id})
 active_after_cancel = tools.call_tool("manage_booking", USERNAME, session, {"action": "list"})
 check("cancel removes it from the active list", active_after_cancel == [], str(active_after_cancel))
+check("cancel result reports the real booking details, not just a bare 'cancelled'",
+      cancelled.get("status") == "cancelled" and cancelled.get("date") == "2026-09-29", str(cancelled))
+
+# hard cases: a wrong, repeated or someone else's cancel must fail loudly, never report success
+wrong_id = tools.call_tool("manage_booking", USERNAME, session, {"action": "cancel", "booking_id": 999999})
+check("cancelling a nonexistent booking id returns an error", "error" in wrong_id, str(wrong_id))
+repeat = tools.call_tool("manage_booking", USERNAME, session, {"action": "cancel", "booking_id": booking_id})
+check("cancelling an already-cancelled booking returns an error", "error" in repeat, str(repeat))
+foreign = memory.create_booking("otheruser_cancel_test", 38, "2026-09-28", "12:00")
+stolen = tools.call_tool("manage_booking", USERNAME, session, {"action": "cancel", "booking_id": foreign["id"]})
+check("cannot cancel another user's booking", "error" in stolen, str(stolen))
+still_active = [b["id"] for b in memory.get_bookings("otheruser_cancel_test")]
+check("the other user's booking is untouched after that attempt", foreign["id"] in still_active, str(still_active))
+memory.cancel_booking("otheruser_cancel_test", foreign["id"])
 
 # hard case: change WHICH CAR a booking is for, keeping the same date/time --
 # this was a real gap (reschedule only ever touched date/time before)

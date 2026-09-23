@@ -27,3 +27,4 @@ data/leads.csv
 # Working notes, not part of the deliverable
 PROGRESS.md
 CLAUDE.md
+*.tmp

@@ -120,7 +120,7 @@ A terminal log of a live run against the backend is in [`docs/demo_conversation_
 
 ## Testing
 
-`scripts/test_car_search.py` runs five retrieval cases against known ground truth (a plain make lookup, a substring match on "GCC", an exact make+model, a make plus a free-text attribute, and a very specific paint description) and reports each search method's results separately alongside the fused ranking. `scripts/test_tools.py` runs 34 checks across every tool, including deliberately adversarial cases: invalid booking slots, Sundays and after-hours, malformed arguments, nonexistent listing IDs, favorites that are added and later removed, and limits on large result sets. Run either with `uv run python scripts/<name>.py`.
+`scripts/test_car_search.py` runs five retrieval cases against known ground truth (a plain make lookup, a substring match on "GCC", an exact make+model, a make plus a free-text attribute, and a very specific paint description) and reports each search method's results separately alongside the fused ranking. `scripts/test_tools.py` runs 39 checks across every tool, including deliberately adversarial cases: invalid booking slots, Sundays and after-hours, cancelling a nonexistent, already-cancelled or someone else's booking, malformed arguments, nonexistent listing IDs, favorites that are added and later removed, and limits on large result sets. Run either with `uv run python scripts/<name>.py`.
 
 ## Project Structure
 

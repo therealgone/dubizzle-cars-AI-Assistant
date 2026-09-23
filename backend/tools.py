@@ -128,7 +128,7 @@ TOOL_SCHEMAS = [
                 "properties": {
                     "action": {"type": "string", "enum": ["create", "reschedule", "cancel", "list"]},
                     "listing_id": {"type": "integer", "description": "required for create; for reschedule, only pass this if the user wants to change WHICH CAR the booking is for"},
-                    "booking_id": {"type": "integer", "description": "required for reschedule/cancel"},
+                    "booking_id": {"type": "integer", "description": "required for reschedule/cancel: the booking's own id from a list result -- NOT the car's listing_id. Call list first if you don't have it."},
                     "date": {"type": "string", "description": "YYYY-MM-DD, required for create; for reschedule, only pass this if the user wants to change the date"},
                     "time": {"type": "string", "description": "HH:MM 24h, required for create; for reschedule, only pass this if the user wants to change the time"},
                 },
@@ -241,10 +241,9 @@ def tool_manage_booking(username: str, session: dict, action: str, listing_id: i
         if action == "create":
             return memory.create_booking(username, listing_id, date, time)
         if action == "reschedule":
-            return memory.reschedule_booking(booking_id, date, time, listing_id=listing_id)
+            return memory.reschedule_booking(username, booking_id, date, time, listing_id=listing_id)
         if action == "cancel":
-            memory.cancel_booking(booking_id)
-            return {"booking_id": booking_id, "status": "cancelled"}
+            return memory.cancel_booking(username, booking_id)
         if action == "list":
             return memory.get_bookings(username)
         return {"error": f"unknown action {action}"}

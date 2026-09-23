@@ -1,4 +1,6 @@
 import json
+import threading
+from collections import defaultdict
 
 import litellm
 from fastapi import FastAPI
@@ -13,6 +15,15 @@ from backend.prompts import build_system_prompt
 app = FastAPI()
 memory.init_db()
 memory.init_leads_csv()
+
+# one lock per user: /chat holds the session file's read-modify-write for the whole (slow) LLM turn,
+# so a select/favorite click for the same user must wait instead of being overwritten by the final save
+_user_locks: dict[str, threading.Lock] = defaultdict(threading.Lock)
+
+
+def _user_lock(username: str) -> threading.Lock:
+    return _user_locks[username.strip().lower()]
+
 
 MAX_TOOL_ITERATIONS = 5
 FALLBACK_REPLY = "Sorry, I'm having trouble with that -- could you try rephrasing?"
@@ -91,6 +102,7 @@ def run_chat_turn(username: str, session: dict, user_message: str) -> tuple[str,
                                  "content": json.dumps({"error": "tool arguments were not valid JSON"})})
                 continue
             result = tools_module.call_tool(tc.function.name, username, session, args)
+            print(f"[tool] {username}: {tc.function.name}({args}) -> {str(result)[:160]}")
             # "make" is unique to car dicts -- booking dicts also have
             # listing_id, which used to cause bookings to render as broken,
             # empty car cards ("Untitled listing")
@@ -112,9 +124,10 @@ def run_chat_turn(username: str, session: dict, user_message: str) -> tuple[str,
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest) -> ChatResponse:
     memory.get_or_create_user(request.username)
-    session = memory.get_session(request.username)
-    reply, cars = run_chat_turn(request.username, session, request.message)
-    memory.save_session(request.username, session)
+    with _user_lock(request.username):
+        session = memory.get_session(request.username)
+        reply, cars = run_chat_turn(request.username, session, request.message)
+        memory.save_session(request.username, session)
     # always return the true current selection, whether it changed via a
     # tool call this turn or was already set from an earlier click/message --
     # the frontend syncs to this every time so it can never show stale data
@@ -126,7 +139,8 @@ def new_session_endpoint(request: NewSessionRequest) -> dict:
     # simulates the user leaving and coming back later -- short-term state
     # resets, long-term SQLite history/favorites/bookings survive
     memory.get_or_create_user(request.username)
-    memory.clear_session(request.username)
+    with _user_lock(request.username):
+        memory.clear_session(request.username)
     return {"status": "reset"}
 
 
@@ -134,18 +148,20 @@ def new_session_endpoint(request: NewSessionRequest) -> dict:
 def select_car_endpoint(request: SelectCarRequest) -> dict:
     # deterministic UI action (a click) -- bypasses the LLM entirely, nothing to interpret
     memory.get_or_create_user(request.username)
-    session = memory.get_session(request.username)
-    result = tools_module.tool_select_car(request.username, session, request.listing_id)
-    memory.save_session(request.username, session)
+    with _user_lock(request.username):
+        session = memory.get_session(request.username)
+        result = tools_module.tool_select_car(request.username, session, request.listing_id)
+        memory.save_session(request.username, session)
     return result
 
 
 @app.post("/manage_favorite")
 def manage_favorite_endpoint(request: ManageFavoriteRequest) -> dict:
     memory.get_or_create_user(request.username)
-    session = memory.get_session(request.username)
-    result = tools_module.tool_manage_favorite(request.username, session, action=request.action, listing_id=request.listing_id)
-    memory.save_session(request.username, session)
+    with _user_lock(request.username):
+        session = memory.get_session(request.username)
+        result = tools_module.tool_manage_favorite(request.username, session, action=request.action, listing_id=request.listing_id)
+        memory.save_session(request.username, session)
     return result
 
 

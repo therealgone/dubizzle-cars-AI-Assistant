@@ -2,6 +2,7 @@ import csv
 import json
 import os
 import sqlite3
+import threading
 from datetime import datetime, time, timezone
 
 DB_PATH = "data/memory.db"
@@ -11,6 +12,7 @@ SESSION_CACHE_PATH = "data/session_cache.json"
 CAR_STACK_LIMIT = 6
 RECENT_LOGS_LIMIT = 6
 PENDING_TURNS_LIMIT = 6
+_cache_lock = threading.Lock()  # the cache file holds every user, so save/clear must not interleave
 LEADS_CSV_PATH = "data/leads.csv"
 LEADS_CSV_FIELDS = ["timestamp", "username", "price_range", "preferences", "notes"]
 
@@ -212,7 +214,21 @@ def create_booking(username: str, listing_id: int, date_str: str, time_str: str)
     return {"id": booking_id, "username": username, "listing_id": listing_id, "date": date_str, "weekday": _weekday(date_str), "time": time_str, "status": "active"}
 
 
+def _get_own_active_booking(conn, username: str, booking_id: int):
+    """The booking row, only if it exists, belongs to this user and is still active."""
+    row = conn.execute(
+        "SELECT * FROM bookings WHERE id = ? AND username = ?",
+        (booking_id, _normalize_username(username)),
+    ).fetchone()
+    if row is None:
+        raise ValueError(f"you have no booking with id {booking_id} -- list your bookings to get the right id")
+    if row["status"] != "active":
+        raise ValueError(f"booking {booking_id} is already {row['status']}")
+    return row
+
+
 def reschedule_booking(
+    username: str,
     booking_id: int,
     date_str: str | None = None,
     time_str: str | None = None,
@@ -221,10 +237,11 @@ def reschedule_booking(
     """Change the time, the car, or both -- whatever's given overrides,
     whatever's omitted keeps its current value."""
     conn = _connect()
-    row = conn.execute("SELECT * FROM bookings WHERE id = ?", (booking_id,)).fetchone()
-    if row is None:
+    try:
+        row = _get_own_active_booking(conn, username, booking_id)
+    except ValueError:
         conn.close()
-        raise ValueError(f"no booking with id {booking_id}")
+        raise
 
     new_date = date_str or row["date"]
     new_time = time_str or row["time"]
@@ -243,14 +260,20 @@ def reschedule_booking(
     return {"id": booking_id, "listing_id": new_listing_id, "date": new_date, "weekday": _weekday(new_date), "time": new_time, "status": "active"}
 
 
-def cancel_booking(booking_id: int) -> None:
+def cancel_booking(username: str, booking_id: int) -> dict:
+    """Raises instead of silently doing nothing, so a wrong id can never be reported as a success."""
     conn = _connect()
-    conn.execute(
-        "UPDATE bookings SET status = 'cancelled', updated_at = ? WHERE id = ?",
-        (_now(), booking_id),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        row = _get_own_active_booking(conn, username, booking_id)
+        conn.execute(
+            "UPDATE bookings SET status = 'cancelled', updated_at = ? WHERE id = ?",
+            (_now(), booking_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return {"id": booking_id, "listing_id": row["listing_id"], "date": row["date"],
+            "weekday": _weekday(row["date"]), "time": row["time"], "status": "cancelled"}
 
 
 def get_bookings(username: str, active_only: bool = True) -> list[dict]:
@@ -373,8 +396,10 @@ def _load_session_cache() -> dict:
 
 def _save_session_cache(data: dict) -> None:
     os.makedirs(os.path.dirname(SESSION_CACHE_PATH), exist_ok=True)
-    with open(SESSION_CACHE_PATH, "w", encoding="utf-8") as f:
+    tmp_path = SESSION_CACHE_PATH + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
+    os.replace(tmp_path, SESSION_CACHE_PATH)  # atomic, so a reader never sees a half-written file
 
 
 def get_session(username: str) -> dict:
@@ -394,9 +419,10 @@ def get_session(username: str) -> dict:
 
 def save_session(username: str, session: dict) -> None:
     username = _normalize_username(username)
-    cache = _load_session_cache()
-    cache[username] = session
-    _save_session_cache(cache)
+    with _cache_lock:
+        cache = _load_session_cache()
+        cache[username] = session
+        _save_session_cache(cache)
 
 
 def clear_session(username: str) -> None:
@@ -405,9 +431,10 @@ def clear_session(username: str) -> None:
     history/favorites/bookings are untouched, so the agent still recalls
     them via tools."""
     username = _normalize_username(username)
-    cache = _load_session_cache()
-    cache.pop(username, None)
-    _save_session_cache(cache)
+    with _cache_lock:
+        cache = _load_session_cache()
+        cache.pop(username, None)
+        _save_session_cache(cache)
 
 
 def push_car_stack(session: dict, cars: list[dict]) -> dict:
