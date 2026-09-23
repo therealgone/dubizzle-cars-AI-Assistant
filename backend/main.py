@@ -60,8 +60,9 @@ class ManageFavoriteRequest(BaseModel):
     action: str  # "add" or "remove"
 
 
-def _build_messages(session: dict, user_message: str) -> list[dict]:
-    messages = [{"role": "system", "content": build_system_prompt(session)}]
+def _build_messages(username: str, session: dict, user_message: str) -> list[dict]:
+    past_summaries = [row["summary"] for row in memory.get_chat_history(username, limit=3)]
+    messages = [{"role": "system", "content": build_system_prompt(session, username, past_summaries)}]
     for turn in session["pending_turns"]:
         messages.append({"role": "user", "content": turn["user"]})
         messages.append({"role": "assistant", "content": turn["assistant"]})
@@ -70,7 +71,7 @@ def _build_messages(session: dict, user_message: str) -> list[dict]:
 
 
 def run_chat_turn(username: str, session: dict, user_message: str) -> tuple[str, list[dict]]:
-    messages = _build_messages(session, user_message)
+    messages = _build_messages(username, session, user_message)
     cars_this_turn: list[dict] = []
     final_reply = FALLBACK_REPLY
 

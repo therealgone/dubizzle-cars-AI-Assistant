@@ -11,7 +11,8 @@ BOOKING_CLOSE = time(20, 0)
 SESSION_CACHE_PATH = "data/session_cache.json"
 CAR_STACK_LIMIT = 6
 RECENT_LOGS_LIMIT = 6
-PENDING_TURNS_LIMIT = 6
+SUMMARIZE_EVERY = 2  # exchanges between saved chat summaries
+CONTEXT_TURNS_LIMIT = 6  # raw recent exchanges still replayed to the model
 _cache_lock = threading.Lock()  # the cache file holds every user, so save/clear must not interleave
 LEADS_CSV_PATH = "data/leads.csv"
 LEADS_CSV_FIELDS = ["timestamp", "username", "price_range", "preferences", "notes"]
@@ -413,6 +414,7 @@ def get_session(username: str) -> dict:
             "car_stack": [],
             "selected_car": None,
             "pending_turns": [],
+            "turns_since_summary": 0,
         },
     )
 
@@ -448,15 +450,18 @@ def push_recent_log(session: dict, summary: str) -> dict:
 
 
 def add_pending_turn(session: dict, user_message: str, assistant_response: str) -> dict:
-    """Raw, unsummarized turns waiting to be batch-summarized. Not capped by
-    FIFO like car_stack/recent_logs -- ready_to_summarize() clears it out
-    entirely once full, it doesn't quietly drop the oldest."""
-    session["pending_turns"].append({"user": user_message, "assistant": assistant_response})
+    """Keeps the last few raw exchanges as live chat context (FIFO) and counts
+    how many haven't been summarized yet -- the two are separate on purpose, so
+    saving a summary never wipes the context the model needs for follow-ups."""
+    session["pending_turns"] = (
+        session["pending_turns"] + [{"user": user_message, "assistant": assistant_response}]
+    )[-CONTEXT_TURNS_LIMIT:]
+    session["turns_since_summary"] = session.get("turns_since_summary", 0) + 1
     return session
 
 
 def ready_to_summarize(session: dict) -> bool:
-    return len(session["pending_turns"]) >= PENDING_TURNS_LIMIT
+    return session.get("turns_since_summary", 0) >= SUMMARIZE_EVERY
 
 
 def update_active_filters(session: dict, new_fields: dict) -> dict:

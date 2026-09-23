@@ -285,7 +285,7 @@ def call_tool(name: str, username: str, session: dict, arguments: dict):
 
 
 # ---------------------------------------------------------------------------
-# Batch chat summarization -- fires once pending_turns hits the cap.
+# Chat summarization -- fires every SUMMARIZE_EVERY exchanges.
 # ---------------------------------------------------------------------------
 
 SUMMARIZE_PROMPT = (
@@ -297,9 +297,8 @@ SUMMARIZE_PROMPT = (
 def maybe_summarize(username: str, session: dict) -> None:
     if not memory.ready_to_summarize(session):
         return
-    transcript = "\n".join(
-        f"User: {t['user']}\nAssistant: {t['assistant']}" for t in session["pending_turns"]
-    )
+    unsummarized = session["pending_turns"][-session["turns_since_summary"]:]
+    transcript = "\n".join(f"User: {t['user']}\nAssistant: {t['assistant']}" for t in unsummarized)
     try:
         response = litellm.completion(
             model=MODEL,
@@ -316,4 +315,4 @@ def maybe_summarize(username: str, session: dict) -> None:
         return
     summary = response.choices[0].message.content.strip()
     memory.log_chat_summary(username, summary)
-    session["pending_turns"] = []
+    session["turns_since_summary"] = 0  # live context in pending_turns is left alone

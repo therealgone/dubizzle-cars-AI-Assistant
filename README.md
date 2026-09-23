@@ -49,6 +49,39 @@ Opens at `http://localhost:8501`. Enter a name to sign in — signing in again l
 
 `data/memory.db`, `data/session_cache.json`, `data/leads.csv` and `chroma_data/` are generated locally and not committed.
 
+## Summary
+
+The backend is a FastAPI service around a single-agent tool-calling loop: Gemini (through LiteLLM) reads each message, calls any of eight tools (search, select, favorites, bookings, lead qualification, comparison and two history lookups) and answers from the results, while the Streamlit client is a thin chat UI. Search fuses exact metadata filters, BM25 keyword scoring and semantic vector search with Reciprocal Rank Fusion; body type and color are classified once by the LLM at ingest and prices are pulled out with regex. Memory has two tiers: a JSON session cache for the live state and SQLite for permanent history, with a chat summary saved every two exchanges, so a returning user is recognized by name and reminded what they were looking for. Guardrails in the system prompt keep it to car topics, away from competitors, resistant to prompt injection and unable to invent facts or booking details, and test drive slots are validated in code for Monday to Saturday, 8am to 8pm, with qualified leads appended to a CSV.
+
+Beyond the brief I added select and favorite buttons that skip the LLM, a car comparison tool, a dev panel that shows a user's cached and long-term memory, a session reset for demonstrating a returning user, and dubizzle branding. Left out of scope: real authentication, price and year range queries, a compact memory trail instead of periodic summaries (held back by LLM token and call limits), proactive alerts, visual search, and Arabic-native replies.
+
+## Required Screenshots
+
+A text export of the full multi-turn chat session is also included: [`docs/demo_conversation_log.txt`](docs/demo_conversation_log.txt).
+
+### 1. A successful multi-turn conversation exploring the inventory
+![Multi-turn conversation](docs/screenshots/multi-chat.png)
+*One continuous session: a search for a white SUV, a side-by-side comparison, booking a test drive, widening the color filter, listing the bookings, deleting one, rescheduling another, and finally listing every car selected so far. Each follow-up resolves against the earlier turns without the user restating anything.*
+
+### 2. The agent recalling a user's previous preferences and history in a completely new session
+The first three screenshots below were taken after restarting the app, so each starts from the dubizzle heading and the fresh welcome message with an empty chat. The short-term state is gone, and the answers come from long-term memory.
+
+![New session: what was I searching for](docs/screenshots/new-chat-memory-1.png)
+*New session: "what was i searching before like the filter and type of car" is answered from history, listing the SUVs and sports cars the user selected or favorited.*
+
+![New session: SUVs selected before](docs/screenshots/new-chat-memory-2.png)
+*New session: "What SUV did i select before" lists the four SUVs from the user's selection history and shows their cards.*
+
+![New session: my bookings](docs/screenshots/new-chat-memory-3.png)
+*New session: "what are my booking" returns the one active test drive left after the earlier deletion and reschedule, the Audi Q7 on Friday, September 25 at 2:00 PM.*
+
+![Recalling the saved preference](docs/screenshots/saved-filter-memory.png)
+*Recalling a saved preference: after an earlier search for a white SUV, "what if i don't want the color white it can be any color" keeps the SUV preference and only widens the color, returning SUVs in other colors (silver Ford Explorer, Land Rover Velar, Cayenne GTS and others).*
+
+## Detailed Design & Decisions
+
+The reasoning behind each choice, with a screenshot for each feature.
+
 ## Why This Setup
 
 **Client — Streamlit over a Notebook.** Streamlit gives a real Python backend paired with an actual chat interface rather than a notebook's cell-by-cell execution model. Just as importantly, it supports clickable UI elements — select-car and favorite buttons — that a notebook can't provide, and I was already comfortable with the framework.
@@ -65,10 +98,10 @@ Asking to "show more" re-runs the same search with a higher `top_k` rather than 
 ![Show more search results](docs/screenshots/Search-Filter-Show-More.png)
 *Asking to "show more": the same search is re-run with a higher result count, extending the list with the next-ranked matches.*
 
-**Memory — dual-tier, short-term JSON + long-term SQLite.** Long-term memory lives in SQLite with four tables: a user profile (the returning-user check), a permanent append-only log of every car the user was shown, selected, favorited or unfavorited, their test drive bookings, and a chat history that is summarized by the LLM every 6 exchanges rather than stored raw, to keep later context meaningful without burning tokens. Short-term memory is a JSON cache holding the session's live state: the active search filters, the currently selected car, the last 6 cars shown (a FIFO stack), and the raw chat turns not yet summarized. Each turn, the selected car, active filters and recently shown cars are injected into the system prompt and the unsummarized turns are replayed as message history, so follow-ups like "how many seats does that Audi have?" resolve without the user restating anything; anything older is looked up from SQLite through tools on demand. The JSON cache isn't auto-expiring — it persists on disk across requests, which is why the UI includes an explicit "Start New Session" button that clears the signed-in user's cache (and only theirs), leaving SQLite untouched, to demonstrate a returning user in a genuinely fresh session.
+**Memory — dual-tier, short-term JSON + long-term SQLite.** Long-term memory lives in SQLite with four tables: a user profile (the returning-user check), a permanent append-only log of every car the user was shown, selected, favorited or unfavorited, their test drive bookings, and a chat history that is summarized by the LLM every 2 exchanges rather than stored raw, to keep later context meaningful without burning tokens. Short-term memory is a JSON cache holding the session's live state: the active search filters, the currently selected car, the last 6 cars shown (a FIFO stack), and the last 6 raw chat turns. Each turn, the signed-in name, the latest few saved conversation summaries, the selected car, active filters and recently shown cars are injected into the system prompt and the recent raw turns are replayed as message history, so a returning user is recognized and can be reminded what they were looking for, and follow-ups like "how many seats does that Audi have?" resolve without the user restating anything; anything older is looked up from SQLite through tools on demand. Saving a summary never clears the live turns, so summarizing more often doesn't cost the model its short-term context. The JSON cache isn't auto-expiring — it persists on disk across requests, which is why the UI includes an explicit "Start New Session" button that clears the signed-in user's cache (and only theirs), leaving SQLite untouched, to demonstrate a returning user in a genuinely fresh session.
 
 ![Cached memory in the dev panel](docs/screenshots/cached-memory.png)
-*Dev panel, Cached Memory: the short-term JSON cache for one user, with the active filters (body type SUV, color white), the recently shown cars, the selected car and the chat turns not yet summarized.*
+*Dev panel, Cached Memory: the short-term JSON cache for one user, with the active filters (body type SUV, color white), the recently shown cars, the selected car and the recent chat turns.*
 
 ![Selected car in the cache](docs/screenshots/cached-memory-selected-car.png)
 *The selected_car entry in the cache after selecting the Audi Q7.*
@@ -151,29 +184,8 @@ There is also a dev panel in the sidebar UI where you can inspect, for the signe
 
 ## Outside the Scope of This Project
 
-Two constraints shaped what didn't make it in. First, the free Gemini tier has a hard daily request cap, which is why the classification step sends all 100 listings in a single request rather than in chunks — the request quota, not the payload size, is the binding constraint, and chunking would have multiplied the number of calls against that limit. Response time on the free tier also varies, occasionally 30+ seconds under load, so the Streamlit client waits up to 120 seconds for a reply. With a higher tier or a paid key, I'd parse more of the unstructured detail sitting in each listing's description (EMI/installment plan variants, inconsistently formatted phone numbers regex can't reliably catch, Arabic-language listings) and use compressed listing photos to infer color directly instead of relying only on text mentions, which would meaningfully improve grounding on listings where the description is sparse.
+A few constraints shaped what didn't make it in. First, the free Gemini tier has a hard daily request cap, which is why the classification step sends all 100 listings in a single request rather than in chunks — the request quota, not the payload size, is the binding constraint, and chunking would have multiplied the number of calls against that limit. Response time on the free tier also varies, occasionally 30+ seconds under load, so the Streamlit client waits up to 120 seconds for a reply. With a higher tier or a paid key, I'd parse more of the unstructured detail sitting in each listing's description (EMI/installment plan variants, inconsistently formatted phone numbers regex can't reliably catch, Arabic-language listings) and use compressed listing photos to infer color directly instead of relying only on text mentions, which would meaningfully improve grounding on listings where the description is sparse.
+
+Memory updating is the other compromise. I wanted a memory trail, a running structure that folds every exchange into a compact long-term profile so the memory stays concise, but the main constraint is the LLM's token and call limits: every extra call to maintain that structure spends the same free-tier quota the assistant needs to answer. So a summary is saved every two exchanges instead. The app also has no session-state management, so the backend can't know when a user has closed the tab or left, which is why the summary can't wait for a session to end; saving every two exchanges means even a short visit leaves a record, and at most the last exchange is lost.
 
 Beyond those constraints, a few product directions felt out of scope for a take-home but would be natural next steps: real authentication instead of a name-only login; price and year range filtering as a proper query (the metadata filter supports exact matches or an OR-list only, so a budget like "under 100k" is applied by the model reading the returned prices rather than by a range query); proactive re-engagement, where a user can "watch" a filter (e.g. notify me when something matches under 20k) instead of only reacting to queries; a lightweight taste model that biases vague searches toward a user's revealed preferences from their favorites and selections (a Mercedes search leaning SUV and red if that's their pattern); visual similarity search, letting a user upload a photo and find comparably-styled listings by embedding images alongside text; and Arabic-native responses rather than only Arabic-aware parsing, given a portion of the dataset's descriptions are already in Arabic. A richer UI — more interactive result cards, tabular comparisons — was also constrained by sticking to Streamlit's built-in components rather than custom frontend work.
-
-## Required Screenshots
-
-A text export of the full multi-turn chat session is also included: [`docs/demo_conversation_log.txt`](docs/demo_conversation_log.txt).
-
-### 1. A successful multi-turn conversation exploring the inventory
-![Multi-turn conversation](docs/screenshots/multi-chat.png)
-*One continuous session: a search for a white SUV, a side-by-side comparison, booking a test drive, widening the color filter, listing the bookings, deleting one, rescheduling another, and finally listing every car selected so far. Each follow-up resolves against the earlier turns without the user restating anything.*
-
-### 2. The agent recalling a user's previous preferences and history in a completely new session
-The first three screenshots below were taken after restarting the app, so each starts from the dubizzle heading and the fresh welcome message with an empty chat. The short-term state is gone, and the answers come from long-term memory.
-
-![New session: what was I searching for](docs/screenshots/new-chat-memory-1.png)
-*New session: "what was i searching before like the filter and type of car" is answered from history, listing the SUVs and sports cars the user selected or favorited.*
-
-![New session: SUVs selected before](docs/screenshots/new-chat-memory-2.png)
-*New session: "What SUV did i select before" lists the four SUVs from the user's selection history and shows their cards.*
-
-![New session: my bookings](docs/screenshots/new-chat-memory-3.png)
-*New session: "what are my booking" returns the one active test drive left after the earlier deletion and reschedule, the Audi Q7 on Friday, September 25 at 2:00 PM.*
-
-![Recalling the saved preference](docs/screenshots/saved-filter-memory.png)
-*Recalling a saved preference: after an earlier search for a white SUV, "what if i don't want the color white it can be any color" keeps the SUV preference and only widens the color, returning SUVs in other colors (silver Ford Explorer, Land Rover Velar, Cayenne GTS and others).*
